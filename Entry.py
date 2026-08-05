@@ -21,9 +21,9 @@ class Entry:
     """
 
     def __init__( self, project_id: int, db: Database, entry_id: int | None = None,
-                  entry_type: EntryType = EntryType.ARBEIT, is_active: bool = True,
-                  created_at: datetime = datetime.now(), edited_at: datetime | None = None,
-                  entry_date: date = date.today(), begin_at: datetime = datetime.now(),
+                  entry_type: EntryType = EntryType.ARBEIT, is_active: bool = False,
+                  created_at: datetime = None, edited_at: datetime | None = None,
+                  entry_date: date = None, begin_at: datetime = None,
                   end_at: datetime | None = None, notes: str | None = None):
         """
         Initialize a new or existing Entry.
@@ -61,6 +61,13 @@ class Entry:
         if entry_id is not None:
             self.id = entry_id
         else:
+            if created_at is None:
+                created_at = datetime.now()
+            if entry_date is None:
+                entry_date = date.today()
+            if begin_at is None:
+                begin_at = datetime.now()
+
             self.id = self.db.insert_new_row(
                 content={"project_id": project_id,"entry_type": entry_type,"is_active": is_active,
                          "created_at": created_at,"edited_at": edited_at,"entry_date": entry_date,
@@ -334,7 +341,9 @@ class Entry:
                 self._duration = self.calculate_duration(self.end_at)
             return self._duration
 
-    def calculate_duration(self, end_or_current_time: datetime = datetime.now()) -> timedelta:
+    def calculate_duration(self, end_or_current_time: datetime = None) -> timedelta:
+        if end_or_current_time is None:
+            end_or_current_time = datetime.now()
         return end_or_current_time - self.begin_at
 
 if __name__ == "__main__":

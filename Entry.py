@@ -36,7 +36,7 @@ class Entry:
             db: The Database instance for persistence operations.
             entry_id: Optional existing entry ID to load. If None, a new entry is created.
             entry_type: The type of entry (from EntryType enum). Defaults to EntryType.ARBEIT.
-            is_active: Whether the entry is active. Defaults to True.
+            is_active: Whether the entry is active. Defaults to False.
             created_at: When the entry was created. Defaults to current datetime.
             edited_at: When the entry was last edited. Defaults to None.
             entry_date: The date of the entry. Defaults to today.
@@ -99,8 +99,11 @@ class Entry:
         Args:
             value: The new project_id value.
         """
-        self._project_id = value
-        self.db.set(Tables.entries, self.id, "project_id", value)
+        if isinstance(value, int):
+            self._project_id = value
+            self.db.set(Tables.entries, self.id, "project_id", value)
+        else:
+            raise ValueError(f"'project_id' must be an integer but is {value.__class__.__name__}")
 
     @property
     def entry_type(self) -> EntryType:
@@ -126,8 +129,11 @@ class Entry:
         Args:
             value: The new entry_type value (EntryType enum).
         """
-        self._entry_type = value
-        self.db.set(Tables.entries, self.id, "entry_type", value)
+        if isinstance(value, EntryType):
+            self._entry_type = value
+            self.db.set(Tables.entries, self.id, "entry_type", value)
+        else:
+            raise ValueError(f"'entry_type' must be an EntryType enum but is of type {value.__class__.__name__}")
 
     @property
     def is_active(self) -> bool:
@@ -153,8 +159,11 @@ class Entry:
         Args:
             value: The new is_active value (boolean).
         """
-        self._is_active = value
-        self.db.set(Tables.entries, self.id, "is_active", value)
+        if isinstance(value, bool):
+            self._is_active = value
+            self.db.set(Tables.entries, self.id, "is_active", value)
+        else:
+            raise ValueError(f"'is_active' must be True or False, but is {value.__class__.__name__}")
 
     @property
     def created_at(self) -> datetime:
@@ -178,10 +187,13 @@ class Entry:
         Automatically persists the change to the database.
 
         Args:
-            value: The new created_at timestamp (datetime or None).
+            value: The new created_at timestamp (datetime).
         """
-        self._created_at = value
-        self.db.set(Tables.entries, self.id, "created_at", value)
+        if isinstance(value, datetime):
+            self._created_at = value
+            self.db.set(Tables.entries, self.id, "created_at", value)
+        else:
+            raise ValueError(f"'created_at' must be datetime but is {value.__class__.__name__}")
 
     @property
     def edited_at(self) -> datetime | None:
@@ -207,8 +219,11 @@ class Entry:
         Args:
             value: The new edited_at timestamp (datetime or None).
         """
-        self._edited_at = value
-        self.db.set(Tables.entries, self.id, "edited_at", value)
+        if isinstance(value, datetime) or value is None:
+            self._edited_at = value
+            self.db.set(Tables.entries, self.id, "edited_at", value)
+        else:
+            raise ValueError(f"'edited_at' must be datetime or None, but is {value.__class__.__name__}'")
 
     @property
     def entry_date(self) -> date | None:
@@ -234,8 +249,11 @@ class Entry:
         Args:
             value: The new entry_date (datetime or None).
         """
-        self._entry_date = value
-        self.db.set(Tables.entries, self.id, "entry_date", value)
+        if isinstance(value, date):
+            self._entry_date = value
+            self.db.set(Tables.entries, self.id, "entry_date", value)
+        else:
+            raise ValueError(f"'entry_date' must be date, but is {value.__class__.__name__}")
 
     @property
     def begin_at(self) -> datetime:
@@ -261,9 +279,12 @@ class Entry:
         Args:
             value: The new begin_at timestamp (datetime or None).
         """
-        self._begin_at = value
-        self._duration = None
-        self.db.set(Tables.entries, self.id, "begin_at", value)
+        if isinstance(value, datetime):
+            self._begin_at = value
+            self._duration = None
+            self.db.set(Tables.entries, self.id, "begin_at", value)
+        else:
+            raise ValueError(f"'begin_at' must be datetime, but is {value.__class__.__name__}")
 
     @property
     def end_at(self) -> datetime | None:
@@ -289,12 +310,15 @@ class Entry:
         Args:
             value: The new end_at timestamp (datetime or None).
         """
-        self._end_at = value
-        if self._end_at is None:
-            self._duration = None
+        if isinstance(value, datetime) or value is None:
+            self._end_at = value
+            if self._end_at is None:
+                self._duration = None
+            else:
+                self._duration = self.calculate_duration(self._end_at)
+            self.db.set(Tables.entries, self.id, "end_at", value)
         else:
-            self._duration = self.calculate_duration(self._end_at)
-        self.db.set(Tables.entries, self.id, "end_at", value)
+            raise ValueError(f"'end_at' must be datetime or None, but is {value.__class__.__name__}")
 
     @property
     def notes(self) -> str | None:

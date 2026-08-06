@@ -1,5 +1,6 @@
 from constants import HourType
 from database import Database, Tables
+from Entry import Entry
 
 class Project:
     """
@@ -54,6 +55,11 @@ class Project:
                 content={"name": name, "target_hours": target_hours, "hour_type": hour_type, "is_default": is_default},
                 table=self.table,
             )
+
+        self.entry_list: list[Entry] = [Entry(self.db, entry_id) for entry_id in db.get_entry_ids_from_project_id(self.id)]
+        #self.entry_list: list[Entry] = []
+        #for entry_id in db.get_entry_ids_from_project_id(self.id):
+        #    self.entry_list.append(Entry(self.db, entry_id))
 
     @property
     def name(self) -> str:

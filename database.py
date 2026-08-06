@@ -144,7 +144,7 @@ class Database:
             cursor.execute(statement, (row_id,))
             return cursor.fetchone()[0]
 
-    def get_ids(self, table: Tables) -> list[int]:
+    def get_entry_ids_from_project_id(self, project_id: int) -> list[int]:
         """
         Retrieve all row IDs from a database table.
 
@@ -154,7 +154,7 @@ class Database:
         Returns:
             A list of integer row IDs.
         """
-        statement = f"SELECT id from {table.name}"
+        statement = f"SELECT id from entries where project_id={project_id}"
         with database_cursor(self.database_path) as cursor:
             cursor.execute(statement)
             return [row[0] for row in cursor.fetchall()]

@@ -18,7 +18,6 @@ class Project:
 
     def __init__(self, db: Database, project_id: int | None = None, name: str = "",
                  target_hours: float= 0, hour_type: HourType | None = HourType.WEEKLY, is_default: bool | None = False):
-        #ToDo: implement Type Checking like in Entry.py
         """
         Initialize a new or existing Project.
 

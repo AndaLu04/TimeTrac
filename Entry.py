@@ -82,7 +82,6 @@ class Entry:
             self.end_at = end_at
             self.notes = notes
             self._init = False
-            # ToDo: also intruduce Type Cheking for inital db creation: new attribute for @property.setters called like "init" or "mass_write" and later insert new row.
             self.id = self.db.insert_new_row(
                 content={"project_id": self._project_id,"entry_type": self._entry_type,"is_active": self._is_active,
                          "created_at": self._created_at,"edited_at": self._edited_at,"entry_date": self._entry_date,

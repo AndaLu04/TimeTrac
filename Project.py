@@ -116,7 +116,7 @@ class Project:
         Args:
             value: The new target hours value.
         """
-        if isinstance(value, float):
+        if isinstance(value, float) or isinstance(value, int):
             self._target_hours = value
             if not self._init:
                 self.db.set(self.table, self.id, "target_hours", value)

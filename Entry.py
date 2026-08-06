@@ -20,7 +20,7 @@ class Entry:
         table: The database table (Tables.entries) where entries are stored.
     """
 
-    def __init__( self, project_id: int, db: Database, entry_id: int | None = None,
+    def __init__( self,  db: Database, entry_id: int | None = None, project_id: int = None,
                   entry_type: EntryType = EntryType.ARBEIT, is_active: bool = False,
                   created_at: datetime = None, edited_at: datetime | None = None,
                   entry_date: date = None, begin_at: datetime = None,
@@ -62,6 +62,8 @@ class Entry:
         if entry_id is not None:
             self.id = entry_id
         else:
+            if project_id is None:
+                raise ValueError("Project ID must be provided")
             if created_at is None:
                 created_at = datetime.now()
             if entry_date is None:

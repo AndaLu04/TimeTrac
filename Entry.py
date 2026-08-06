@@ -57,6 +57,7 @@ class Entry:
         self._end_at: Optional[datetime] = None
         self._notes: Optional[str] = None
         self._duration: Optional[timedelta] = None
+        self._init: bool = False
 
         if entry_id is not None:
             self.id = entry_id
@@ -68,10 +69,22 @@ class Entry:
             if begin_at is None:
                 begin_at = datetime.now()
 
+            self._init = True #activate init behavior: setters don't persist to db to create the db row after initializing all internal variables
+            self.project_id = project_id
+            self.entry_type = entry_type
+            self.is_active = is_active
+            self.created_at = created_at
+            self.edited_at = edited_at
+            self.entry_date = entry_date
+            self.begin_at = begin_at
+            self.end_at = end_at
+            self.notes = notes
+            self._init = False
+            # ToDo: also intruduce Type Cheking for inital db creation: new attribute for @property.setters called like "init" or "mass_write" and later insert new row.
             self.id = self.db.insert_new_row(
-                content={"project_id": project_id,"entry_type": entry_type,"is_active": is_active,
-                         "created_at": created_at,"edited_at": edited_at,"entry_date": entry_date,
-                         "begin_at": begin_at,"end_at": end_at,"notes": notes,},
+                content={"project_id": self._project_id,"entry_type": self._entry_type,"is_active": self._is_active,
+                         "created_at": self._created_at,"edited_at": self._edited_at,"entry_date": self._entry_date,
+                         "begin_at": self._begin_at,"end_at": self._end_at,"notes": self._notes,},
                 table=self.table
             )
 
@@ -101,7 +114,8 @@ class Entry:
         """
         if isinstance(value, int):
             self._project_id = value
-            self.db.set(Tables.entries, self.id, "project_id", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "project_id", value)
         else:
             raise ValueError(f"'project_id' must be an integer but is {value.__class__.__name__}")
 
@@ -131,7 +145,8 @@ class Entry:
         """
         if isinstance(value, EntryType):
             self._entry_type = value
-            self.db.set(Tables.entries, self.id, "entry_type", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "entry_type", value)
         else:
             raise ValueError(f"'entry_type' must be an EntryType enum but is of type {value.__class__.__name__}")
 
@@ -161,7 +176,8 @@ class Entry:
         """
         if isinstance(value, bool):
             self._is_active = value
-            self.db.set(Tables.entries, self.id, "is_active", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "is_active", value)
         else:
             raise ValueError(f"'is_active' must be True or False, but is {value.__class__.__name__}")
 
@@ -191,7 +207,8 @@ class Entry:
         """
         if isinstance(value, datetime):
             self._created_at = value
-            self.db.set(Tables.entries, self.id, "created_at", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "created_at", value)
         else:
             raise ValueError(f"'created_at' must be datetime but is {value.__class__.__name__}")
 
@@ -221,7 +238,8 @@ class Entry:
         """
         if isinstance(value, datetime) or value is None:
             self._edited_at = value
-            self.db.set(Tables.entries, self.id, "edited_at", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "edited_at", value)
         else:
             raise ValueError(f"'edited_at' must be datetime or None, but is {value.__class__.__name__}'")
 
@@ -251,7 +269,8 @@ class Entry:
         """
         if isinstance(value, date):
             self._entry_date = value
-            self.db.set(Tables.entries, self.id, "entry_date", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "entry_date", value)
         else:
             raise ValueError(f"'entry_date' must be date, but is {value.__class__.__name__}")
 
@@ -282,7 +301,8 @@ class Entry:
         if isinstance(value, datetime):
             self._begin_at = value
             self._duration = None
-            self.db.set(Tables.entries, self.id, "begin_at", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "begin_at", value)
         else:
             raise ValueError(f"'begin_at' must be datetime, but is {value.__class__.__name__}")
 
@@ -316,7 +336,8 @@ class Entry:
                 self._duration = None
             else:
                 self._duration = self.calculate_duration(self._end_at)
-            self.db.set(Tables.entries, self.id, "end_at", value)
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "end_at", value)
         else:
             raise ValueError(f"'end_at' must be datetime or None, but is {value.__class__.__name__}")
 
@@ -345,7 +366,8 @@ class Entry:
             value: The new notes string, or None.
         """
         self._notes = value
-        self.db.set(Tables.entries, self.id, "notes", value)
+        if not self._init:
+            self.db.set(Tables.entries, self.id, "notes", value)
 
     @property
     def duration(self) -> timedelta:

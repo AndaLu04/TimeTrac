@@ -117,7 +117,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "project_id", value)
         else:
-            raise ValueError(f"'project_id' must be an integer but is {value.__class__.__name__}")
+            raise TypeError(f"'project_id' must be an integer but is {value.__class__.__name__}")
 
     @property
     def entry_type(self) -> EntryType:
@@ -148,7 +148,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "entry_type", value)
         else:
-            raise ValueError(f"'entry_type' must be an EntryType enum but is of type {value.__class__.__name__}")
+            raise TypeError(f"'entry_type' must be an EntryType enum but is of type {value.__class__.__name__}")
 
     @property
     def is_active(self) -> bool:
@@ -179,7 +179,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "is_active", value)
         else:
-            raise ValueError(f"'is_active' must be True or False, but is {value.__class__.__name__}")
+            raise TypeError(f"'is_active' must be True or False, but is {value.__class__.__name__}")
 
     @property
     def created_at(self) -> datetime:
@@ -210,7 +210,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "created_at", value)
         else:
-            raise ValueError(f"'created_at' must be datetime but is {value.__class__.__name__}")
+            raise TypeError(f"'created_at' must be datetime but is {value.__class__.__name__}")
 
     @property
     def edited_at(self) -> datetime | None:
@@ -241,7 +241,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "edited_at", value)
         else:
-            raise ValueError(f"'edited_at' must be datetime or None, but is {value.__class__.__name__}'")
+            raise TypeError(f"'edited_at' must be datetime or None, but is {value.__class__.__name__}'")
 
     @property
     def entry_date(self) -> date | None:
@@ -272,7 +272,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "entry_date", value)
         else:
-            raise ValueError(f"'entry_date' must be date, but is {value.__class__.__name__}")
+            raise TypeError(f"'entry_date' must be date, but is {value.__class__.__name__}")
 
     @property
     def begin_at(self) -> datetime:
@@ -304,7 +304,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "begin_at", value)
         else:
-            raise ValueError(f"'begin_at' must be datetime, but is {value.__class__.__name__}")
+            raise TypeError(f"'begin_at' must be datetime, but is {value.__class__.__name__}")
 
     @property
     def end_at(self) -> datetime | None:
@@ -339,7 +339,7 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "end_at", value)
         else:
-            raise ValueError(f"'end_at' must be datetime or None, but is {value.__class__.__name__}")
+            raise TypeError(f"'end_at' must be datetime or None, but is {value.__class__.__name__}")
 
     @property
     def notes(self) -> str | None:
@@ -365,9 +365,12 @@ class Entry:
         Args:
             value: The new notes string, or None.
         """
-        self._notes = value
-        if not self._init:
-            self.db.set(Tables.entries, self.id, "notes", value)
+        if isinstance(value, str):
+            self._notes = value
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "notes", value)
+        else:
+            raise TypeError(f"'notes' must be str, but is {value.__class__.__name__}")
 
     @property
     def duration(self) -> timedelta:

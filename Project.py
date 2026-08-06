@@ -17,6 +17,7 @@ class Project:
 
     def __init__(self, db: Database, project_id: int | None = None, name: str = "",
                  target_hours: float= 0, hour_type: HourType | None = HourType.WEEKLY, is_default: bool | None = False):
+        #ToDo: implement Type Checking like in Entry.py
         """
         Initialize a new or existing Project.
 
@@ -37,10 +38,18 @@ class Project:
         self._target_hours: float | None = None
         self._hour_type: HourType | None = None
         self._is_default: bool | None = None
+        self._init: bool = False
 
         if project_id is not None:
             self.id = project_id
         else:
+            self._init = True
+            self.name = name
+            self.target_hours = target_hours
+            self.hour_type = hour_type
+            self.is_default = is_default
+            self._init= False
+
             self.id = self.db.insert_new_row(
                 content={"name": name, "target_hours": target_hours, "hour_type": hour_type, "is_default": is_default},
                 table=self.table,
@@ -70,8 +79,12 @@ class Project:
         Args:
             value: The new project name.
         """
-        self._name = value
-        self.db.set(self.table, self.id, "name", value)
+        if isinstance(value, str):
+            self._name = value
+            if not self._init:
+                self.db.set(self.table, self.id, "name", value)
+        else:
+            raise TypeError(f"'name' must be str but is {value.__class__.__name__}")
 
     @property
     def target_hours(self) -> float | int:
@@ -97,8 +110,12 @@ class Project:
         Args:
             value: The new target hours value.
         """
-        self._target_hours = value
-        self.db.set(self.table, self.id, "target_hours", value)
+        if isinstance(value, float):
+            self._target_hours = value
+            if not self._init:
+                self.db.set(self.table, self.id, "target_hours", value)
+        else:
+            raise TypeError(f"'target_hours' must be float but is {value.__class__.__name__}")
 
     @property
     def hour_type(self) -> HourType:
@@ -124,8 +141,12 @@ class Project:
         Args:
             value: The new hour_type value (HourType enum).
         """
-        self._hour_type = value
-        self.db.set(self.table, self.id, "hour_type", value)
+        if isinstance(value, HourType):
+            self._hour_type = value
+            if not self._init:
+                self.db.set(self.table, self.id, "hour_type", value)
+        else:
+            raise TypeError(f"'hour_type' must be HourType enum but is {value.__class__.__name__}")
 
     @property
     def is_default(self) -> bool:
@@ -151,8 +172,12 @@ class Project:
         Args:
             value: The new is_default value (boolean).
         """
-        self._is_default = value
-        self.db.set(self.table, self.id, "is_default", value)
+        if isinstance(value, bool):
+            self._is_default = value
+            if not self._init:
+                self.db.set(self.table, self.id, "is_default", value)
+        else:
+            raise TypeError(f"'is_default' must be bool but is {value.__class__.__name__}")
 
 
 if __name__ == '__main__':

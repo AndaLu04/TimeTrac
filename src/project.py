@@ -59,6 +59,7 @@ class Project:
         #self.entry_list: list[Entry] = []
         #for entry_id in db.get_entry_ids_from_project_id(self.id):
         #    self.entry_list.append(Entry(self.db, entry_id))
+        print(self.entry_list)
 
     @property
     def name(self) -> str:
@@ -189,3 +190,5 @@ if __name__ == '__main__':
     database = Database()
     project = Project(database, None, "test", 20)
     print(project.id, project.name, project.target_hours, project.hour_type, project.is_default)
+    for entry in project.entry_list:
+        print(entry.id)

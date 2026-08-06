@@ -1,7 +1,8 @@
 from pathlib import Path
 from enum import StrEnum, Enum
 
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_SRC = PROJECT_ROOT / "src"
 DATABASE = PROJECT_ROOT / "data" / "database.db"
 
 class EntryType(StrEnum):
@@ -26,3 +27,7 @@ ALLOWED_COLUMNS = {
     Tables.projects: {"name", "target_hours", "hour_type", "is_default"},
     Tables.entries: {"project_id", "entry_type", "is_active", "created_at", "edited_at", "entry_date", "begin_at", "end_at", "notes"}
 }
+
+if __name__ == "__main__":
+    print(f"PROJECT_ROOT {PROJECT_ROOT}")
+    print(f"DATABASE {DATABASE}")

@@ -366,7 +366,7 @@ class Entry:
         Args:
             value: The new notes string, or None.
         """
-        if isinstance(value, str):
+        if isinstance(value, str) or value is None:
             self._notes = value
             if not self._init:
                 self.db.set(Tables.entries, self.id, "notes", value)
@@ -398,8 +398,7 @@ class Entry:
 
 if __name__ == "__main__":
     database = Database()
-    entry = Entry(1, database)
-    entry.project_id = 2
+    entry = Entry(database, None, 1)
     print(
         "id:            ", entry.id,
         "\nproject_id:  ", entry.project_id,
@@ -413,6 +412,6 @@ if __name__ == "__main__":
     )
     print(entry.entry_type.__class__.__name__)
 
-    for i in range(10):
-        sleep(1)
-        print(entry.duration)
+    #for i in range(10):
+    #    sleep(1)
+    #    print(entry.duration)

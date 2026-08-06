@@ -1,6 +1,6 @@
 from constants import HourType
 from database import Database, Tables
-from Entry import Entry
+from entry import Entry
 
 class Project:
     """

@@ -1,7 +1,7 @@
 from time import sleep
 from typing import Optional
 
-from database import Database, Tables
+from data.database import Database, Tables
 from constants import EntryType
 from datetime import datetime, date, timedelta
 
@@ -398,7 +398,7 @@ class Entry:
 
 if __name__ == "__main__":
     database = Database()
-    entry = Entry(database, None, 1)
+    entry = Entry(database, None, 3, is_active=True)
     print(
         "id:            ", entry.id,
         "\nproject_id:  ", entry.project_id,

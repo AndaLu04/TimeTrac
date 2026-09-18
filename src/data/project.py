@@ -1,6 +1,6 @@
 from constants import HourType
-from database import Database, Tables
-from entry import Entry
+from data.database import Database, Tables
+from data.entry import Entry
 
 class Project:
     """
@@ -188,7 +188,7 @@ class Project:
 
 if __name__ == '__main__':
     database = Database()
-    project = Project(database, None, "test", 20)
+    project = Project(database, None, "test2", 20)
     print(project.id, project.name, project.target_hours, project.hour_type, project.is_default)
     for entry in project.entry_list:
         print(entry.id)

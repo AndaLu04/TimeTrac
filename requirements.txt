@@ -1,0 +1,6 @@
+awesometkinter==2021.11.8
+customtkinter==6.0.0
+darkdetect==0.8.0
+packaging==26.3
+pillow==12.3.0
+python-bidi==0.6.11

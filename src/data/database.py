@@ -144,6 +144,12 @@ class Database:
             cursor.execute(statement, (row_id,))
             return cursor.fetchone()[0]
 
+    def get_all_project_ids(self) -> list:
+        statement = "SELECT id from projects"
+        with database_cursor(self.database_path) as cursor:
+            cursor.execute(statement)
+            return [row[0] for row in cursor.fetchall()]
+
     def get_entry_ids_from_project_id(self, project_id: int) -> list[int]:
         """
         Retrieve all row IDs from a database table.
@@ -239,6 +245,12 @@ class Database:
                 );
                 """
             )
+            #cursor.execute("""
+            #               CREATE UNIQUE INDEX IF NOT EXISTS single_true_index
+            #                   ON entries (is_active)
+            #                   WHERE is_active = 1
+            #               """)
+
 
 if __name__ == "__main__":
     database = Database()

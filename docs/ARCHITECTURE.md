@@ -55,11 +55,10 @@ Robustheit):
 - `Database.__init__` führt `PRAGMA foreign_keys = ON` ein (FKs werden sonst
   von SQLite ignoriert).
 - Das auskommentierte Unique-Index auf `is_active = 1` aktivieren – es erzwingt
-  die Invariante „maximal ein aktiver Eintrag" auf DB-Ebene. Vorher prüfen:
-  der Index muss pro Datenbank einmalig sein (globales „ein aktiver Eintrag
-  über alle Projekte hinweg"). Falls später mehrere parallele Projekte
-  gleichzeitig laufen sollen, wird der Index auf `(project_id) WHERE
-  is_active = 1` erweitert.
+  die Invariante „**genau ein aktiver Eintrag global**" (Entscheidung) auf
+  DB-Ebene. Ein Wechsel zu „ein aktiver Eintrag je Projekt" wäre später nur
+  eine Index-Änderung auf `(project_id) WHERE is_active = 1` plus Anpassung
+  im `TrackingService` – das Schema selbst bleibt davon unberührt.
 - `Project.entry_list` lädt beim Konstruieren **alle** Entries eager → auf
   eine explizite Methode `load_entries()` bzw. Lazy-Property umstellen
   (Performance bei großen Historien).
@@ -91,6 +90,7 @@ Bestehende Spalten: `id`, `name`, `target_hours`, `hour_type`, `is_default`.
 | Spalte     | Typ    | Default      | Zweck                                              |
 |------------|--------|--------------|----------------------------------------------------|
 | `workdays` | TEXT   | `"[0,1,2,3,4]"` | JSON-Liste der Arbeitstage (ISO: Mo=0 … So=6) – **konfigurierbar** für Wochenendarbeit |
+| `daily_hours_override` | TEXT | NULL | JSON `{weekday: hours}` – überschreibt `target_hours` einzelner Wochentage; nur für `hour_type = DAILY` relevant. NULL = gleichmäßige Verteilung |
 | `is_active` | INTEGER | `1`        | Archivierung ohne Löschen                         |
 | `notes`    | TEXT   | NULL         | optionale Notiz                                    |
 
@@ -99,10 +99,10 @@ Bestehende Spalten: `id`, `name`, `target_hours`, `hour_type`, `is_default`.
 `hour_type` (siehe 5.1). Die ursprünglich vorgeschlagenen Felder
 `weekly_hours`/`daily_hours`/`monthly_hours` entfallen. Das Muster
 „8 h Di + 8 h Mi" wird über `hour_type = DAILY` mit `target_hours = 8` und
-`workdays = [1, 2]` abgebildet. **Bekannte Einschränkung:** ungleiche Stunden
-pro Wochentag (z. B. 6 h Di + 8 h Mi) sind so nicht darstellbar; falls das
-praktisch vorkommt, wird später ein optionales JSON-Feld
-`daily_hours_override` ergänzt – kein Grund, das Modell jetzt zu verkomplizieren.
+`workdays = [1, 2]` abgebildet.
+
+**Ungleiche Tagesstunden** (z. B. 6 h Di + 8 h Mi) werden über das optionale
+JSON-Feld `daily_hours_override` abgebildet (ab v1, Entscheidung):
 
 ### 3.2 Tabelle `entries` (bestehend, erweitert)
 
@@ -115,6 +115,7 @@ Bestehende Spalten: `id`, `project_id`, `entry_type`, `is_active`,
 |------------------|--------|---------|------------------------------------------------|
 | `break_minutes`  | INTEGER | `0`     | Pause (dt. Arbeitsrecht: ab 6 h ≥ 30 min)      |
 | `project_label`  | TEXT   | NULL    | freies Tätigkeitsfeld („Jugendgruppe") – nicht zu verwechseln mit `project_id` |
+| `counts_as_work` | INTEGER | NULL    | **pro Eintrag wählbar** (Entscheidung): zählt dieser Eintrag als Arbeitszeit? NULL = Default je `entry_type` (Tabelle 3.3); gesetzt nur sinnvoll bei `SONSTIGES`/`PLATZHALTER` |
 | `deleted_at`     | TEXT   | NULL    | Soft Delete: Einträge in Überstundenberechnungen verschwinden nicht spurlos; Basis für spätere Sync-Konfliktauflösung |
 
 `entry_date` bleibt das fachliche Zuordnungsdatum (für Woche/Monat/Jahr),
@@ -142,12 +143,13 @@ Soll-Behandlung (zentrale Konstante im `OvertimeService`, Abschnitt 5.3):
 | Typ                    | Ist-Stunden      | Soll-Stunden                        |
 |------------------------|------------------|-------------------------------------|
 | Arbeit                 | zählt (netto von Pausen) | –                            |
+| Einträge mit `counts_as_work = 1` | zählt | –                              |
 | Urlaub                 | –                | gilt als erfüllt (Entgeltfortzahlung) |
 | Krankheit              | –                | gilt als erfüllt (Entgeltfortzahlung) |
 | Feiertag               | –                | gilt als erfüllt (gesetzl./tariflich) |
 | **Elternzeit**         | –                | **scheidet aus** – rein informativer Eintrag, keine Gutschrift, keine Reduktion |
 | Überstundenausgleich   | –                | reduziert den Überstundenstand im Zeitraum |
-| Sonstiges              | zählt (konfigurierbar) | –                                  |
+| Sonstiges              | default: nein; **pro Eintrag** über `counts_as_work` wählbar (Entscheidung) | – |
 | Platzhalter            | –                | –                                   |
 
 ### 3.4 Sync-Vorbereitung (ohne Sync in v1)
@@ -187,7 +189,8 @@ Löschen:      Entry → deleted_at = now (Soft Delete)
 **Invarianten (im `TrackingService` erzwungen, zusätzlich durch den
 Unique-Index abgesichert):**
 
-- Maximal ein `is_active = 1`-Eintrag.
+- **Genau ein** `is_active = 1`-Eintrag **global** über alle Projekte
+  (Entscheidung) – vor jedem `clock_in` prüfen.
 - `end_at > begin_at` (falls gesetzt); `is_active = 0` ⟹ `end_at` gesetzt.
 
 Die Live-Uhr im Dashboard: `LiveDurationLabel` holt **einmal** den aktiven
@@ -265,9 +268,14 @@ class AbstractWorkingTimeModel(ABC):
 | HourType    | `target_hours` bedeutet | Tagesformel                                  | Beispiele                       |
 |-------------|-------------------------|----------------------------------------------|---------------------------------|
 | `WEEKLY`    | Stunden pro Woche       | gleichverteilt auf `workdays`               | 40 h Pastor (Mo–Fr → 8 h/Tag)   |
-| `DAILY`     | Stunden pro Arbeitstag | `target_hours` an jedem Tag in `workdays`   | Teilzeit 8 h Di + 8 h Mi         |
+| `DAILY`     | Stunden pro Arbeitstag | `target_hours` an jedem Tag in `workdays`; `daily_hours_override` überschreibt einzelne Tage | Teilzeit 8 h Di + 8 h Mi; 6 h Di + 8 h Mi via Override |
 | `MONTHLY`   | Stunden pro Monat      | **pauschal**: Monat = `target_hours`; Teilzeiträume werden anteilig nach Arbeitstagen hochgerechnet | 20 h Werkstudent                |
 | `ALLTIME`   | Gesamtvolumen (Stunden)| Zeitraumanteil nach Arbeitstagen            | Projektauftrag „300 h gesamt"  |
+
+**ALLTIME in v1 deaktiviert** (Entscheidung): Das Interface und die Strategie
+bleiben implementiert (kein toter Code-Entwurf), aber die Projektauswahl-UI
+bietet den Typ in v1 **nicht an**. Er wird erst aktiviert, wenn ein konkreter
+Bedarf besteht – Logik und UI sind dann bereits vorbereitet.
 
 `MONTHLY` ist bewusst **pauschal** (Entscheidung): Die Woche erhält
 `target_hours × (Arbeitstage der Woche / Arbeitstage des Monats)`, der Monat
@@ -296,7 +304,8 @@ bleibt dabei unangetastet – der Service orchestriert nur.
 
 ```
 ist_hours   = Σ duration(ARBEIT-Entries, netto von break_minutes)
-              + Gutschrift-Logik je EntryType (Tabelle in 3.3)
+              + Gutschrift-Logik je EntryType (Tabelle in 3.3);
+              `counts_as_work = 1` zählt stets als Ist-Stunden
 soll_hours  = Σ target_hours je Zeitraum (nur Tage in workdays;
               Feiertags-Entries gelten als erfülltes Soll)
 overtime    = ist_hours − soll_hours
@@ -379,16 +388,17 @@ unabhängig davon funktioniert.
 | CSV-Format                 | Trennzeichen frei eintragbar, Default `,`          |
 | Backup                     | manueller DB-Export (Datei-Dialog)                 |
 | Sollstunden-Felder         | **ein** Feld `target_hours`, Semantik via `hour_type` (wie im bestehenden Schema) |
+| Ungleiche Tagesstunden     | `daily_hours_override` (JSON) **ab v1**, optional ausfüllbar |
+| Aktive Einträge            | **genau einer global** (Unique-Index wie im Code vorbereitet) |
+| Sonstiges                  | **pro Eintrag** wählbar (`counts_as_work`), Default: zählt nicht |
+| ALLTIME-Modell             | Interface + Strategie implementiert, **UI-Auswahl in v1 deaktiviert** |
 
 ## 8. Verbleibende offene Fragen
 
-1. **Ungleiche Tagesstunden** (z. B. 6 h Di + 8 h Mi): aktuell nicht
-   abbildbar; optional späteres `daily_hours_override`-JSON-Feld.
-2. **Parallele aktive Einträge**: Genau ein aktiver Eintrag global
-   (der Unique-Index) – oder je Projekt einer? Design geht von global aus.
-3. **Sonstiges (`SONSTIGES`)**: zählt defaultmäßig als Arbeitszeit –
-   konfigurierbar pro Eintrag oder global?
-4. **ALLTIME-Modell**: Für v1 wirklich benötigt oder erst später aktivieren?
+Keine – alle Design-Entscheidungen sind getroffen. Die Implementierung kann
+gemäß Abschnitt 9 beginnen. Neue Fragen (z. B. Details des ICS-Imports oder
+der WebDAV-Authentifizierung) werden bei Erreichen des jeweiligen Schritts
+als Erweiterung dieses Dokuments geklärt.
 
 ## 9. Umsetzungsreihenfolge (Vorschlag)
 

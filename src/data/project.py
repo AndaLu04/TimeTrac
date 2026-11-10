@@ -38,6 +38,7 @@ class Project:
         self._target_hours: float | None = None
         self._hour_type: HourType | None = None
         self._is_default: bool | None = None
+        self._entry_list: list[Entry] | None = None
         self._init: bool = False
 
         if project_id is not None:
@@ -55,11 +56,33 @@ class Project:
                 table=self.table,
             )
 
-        self.entry_list: list[Entry] = [Entry(self.db, entry_id) for entry_id in db.get_entry_ids_from_project_id(self.id)]
-        #self.entry_list: list[Entry] = []
-        #for entry_id in db.get_entry_ids_from_project_id(self.id):
-        #    self.entry_list.append(Entry(self.db, entry_id))
-        print(self.entry_list)
+    @property
+    def entry_list(self) -> list[Entry]:
+        """
+        Get all entries assigned to this project.
+
+        Loads the entry IDs from the database on first access and caches the
+        resulting Entry objects.
+
+        Returns:
+            A list of Entry objects belonging to this project.
+        """
+        if self._entry_list is None:
+            self._entry_list = [Entry(self.db, entry_id) for entry_id in self.db.get_entry_ids_from_project_id(self.id)]
+        return self._entry_list
+
+    def load_entries(self) -> list[Entry]:
+        """
+        Reload all entries assigned to this project from the database.
+
+        Discards the cached entry list so the next access to entry_list fetches
+        fresh data.
+
+        Returns:
+            A list of Entry objects belonging to this project.
+        """
+        self._entry_list = None
+        return self.entry_list
 
     @property
     def name(self) -> str:

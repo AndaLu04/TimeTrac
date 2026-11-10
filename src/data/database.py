@@ -28,6 +28,7 @@ def database_cursor(db: Path = DATABASE) -> Iterator[Cursor]:
         autocommit=True)
     cursor = connection.cursor()
     try:
+        cursor.execute("PRAGMA foreign_keys = ON")
         yield cursor
     finally:
         cursor.close()
@@ -138,7 +139,12 @@ class Database:
 
         Returns:
             The value of the specified column from the database.
+
+        Raises:
+            ValueError: If the column is not in ALLOWED_COLUMNS for the table.
         """
+        if key not in ALLOWED_COLUMNS[table]:
+            raise ValueError(f"Invalid column: {key}")
         statement = f"SELECT {key} from {table.name} where id=?"
         with database_cursor(self.database_path) as cursor:
             cursor.execute(statement, (row_id,))
@@ -160,9 +166,9 @@ class Database:
         Returns:
             A list of integer row IDs.
         """
-        statement = f"SELECT id from entries where project_id={project_id}"
+        statement = "SELECT id from entries where project_id=?"
         with database_cursor(self.database_path) as cursor:
-            cursor.execute(statement)
+            cursor.execute(statement, (project_id,))
             return [row[0] for row in cursor.fetchall()]
 
     def insert_new_row(self, content: dict,  table: Tables) -> int:
@@ -176,12 +182,12 @@ class Database:
         Returns:
             The ID of the newly inserted row.
         """
-        values: list = []
-        keys: list = []
-        for key, value in content.items():
-            values.append(value)
-            keys.append(key)
+        invalid_columns = set(content) - ALLOWED_COLUMNS[table]
+        if invalid_columns:
+            raise ValueError(f"Invalid columns: {invalid_columns}")
 
+        values: list = list(content.values())
+        keys: list = list(content)
 
         statement: str = f"""
                          INSERT INTO {table.name} ({",".join(keys)})
@@ -245,11 +251,11 @@ class Database:
                 );
                 """
             )
-            #cursor.execute("""
-            #               CREATE UNIQUE INDEX IF NOT EXISTS single_true_index
-            #                   ON entries (is_active)
-            #                   WHERE is_active = 1
-            #               """)
+            cursor.execute("""
+                           CREATE UNIQUE INDEX IF NOT EXISTS single_true_index
+                               ON entries (is_active)
+                               WHERE is_active = 1
+                           """)
 
 
 if __name__ == "__main__":

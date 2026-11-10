@@ -28,12 +28,14 @@ class TestConstants(unittest.TestCase):
     def test_allowed_columns_cover_schema(self):
         self.assertEqual(
             ALLOWED_COLUMNS[Tables.projects],
-            {"name", "target_hours", "hour_type", "is_default"},
+            {"name", "target_hours", "hour_type", "is_default", "workdays",
+             "daily_hours_override", "is_active", "notes"},
         )
         self.assertEqual(
             ALLOWED_COLUMNS[Tables.entries],
             {"project_id", "entry_type", "is_active", "created_at", "edited_at",
-             "entry_date", "begin_at", "end_at", "notes"},
+             "entry_date", "begin_at", "end_at", "notes", "break_minutes",
+             "project_label", "counts_as_work", "deleted_at"},
         )
 
 

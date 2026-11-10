@@ -1,3 +1,5 @@
+from json import dumps, loads
+
 from constants import HourType
 from data.database import Database, Tables
 from data.entry import Entry
@@ -38,6 +40,10 @@ class Project:
         self._target_hours: float | None = None
         self._hour_type: HourType | None = None
         self._is_default: bool | None = None
+        self._workdays: list[int] | None = None
+        self._daily_hours_override: dict[int, float] | None = None
+        self._is_active: bool | None = None
+        self._notes: str | None = None
         self._entry_list: list[Entry] | None = None
         self._init: bool = False
 
@@ -207,6 +213,83 @@ class Project:
                 self.db.set(self.table, self.id, "is_default", value)
         else:
             raise TypeError(f"'is_default' must be bool but is {value.__class__.__name__}")
+
+    @property
+    def workdays(self) -> set[int]:
+        """
+        Get the configured working days (ISO weekdays, Monday=0 ... Sunday=6).
+
+        Stored as JSON list; defaults to Monday-Friday.
+        """
+        if self._workdays is None:
+            raw = self.db.get(self.table, self.id, "workdays")
+            self._workdays = set(loads(raw))
+        return set(self._workdays)
+
+    @workdays.setter
+    def workdays(self, value: set[int] | list[int]) -> None:
+        """Set the working days (persists automatically as JSON list)."""
+        days = sorted(value)
+        if any(not isinstance(day, int) or day < 0 or day > 6 for day in days):
+            raise TypeError(f"'workdays' must contain ISO weekdays 0-6, but is {value!r}")
+        self._workdays = days
+        if not self._init:
+            self.db.set(self.table, self.id, "workdays", dumps(days))
+
+    @property
+    def daily_hours_override(self) -> dict[int, float]:
+        """
+        Get per-weekday target hour overrides (ISO weekday -> hours).
+
+        Empty dict means uniform distribution; only relevant for DAILY.
+        """
+        if self._daily_hours_override is None:
+            raw = self.db.get(self.table, self.id, "daily_hours_override")
+            self._daily_hours_override = {int(k): v for k, v in loads(raw).items()} if raw else {}
+        return dict(self._daily_hours_override)
+
+    @daily_hours_override.setter
+    def daily_hours_override(self, value: dict[int, float]) -> None:
+        """Set per-weekday target hour overrides (persists automatically as JSON)."""
+        if not isinstance(value, dict):
+            raise TypeError(f"'daily_hours_override' must be dict, but is {value.__class__.__name__}")
+        self._daily_hours_override = dict(value)
+        if not self._init:
+            self.db.set(self.table, self.id, "daily_hours_override", dumps(value))
+
+    @property
+    def is_active(self) -> bool:
+        """Get whether this project is active (archived projects are inactive)."""
+        if self._is_active is None:
+            self._is_active = self.db.get(self.table, self.id, "is_active")
+        return self._is_active
+
+    @is_active.setter
+    def is_active(self, value: bool) -> None:
+        """Set whether this project is active (persists automatically)."""
+        if isinstance(value, bool):
+            self._is_active = value
+            if not self._init:
+                self.db.set(self.table, self.id, "is_active", value)
+        else:
+            raise TypeError(f"'is_active' must be bool, but is {value.__class__.__name__}")
+
+    @property
+    def notes(self) -> str | None:
+        """Get the optional project note."""
+        if self._notes is None:
+            self._notes = self.db.get(self.table, self.id, "notes")
+        return self._notes
+
+    @notes.setter
+    def notes(self, value: str | None) -> None:
+        """Set the optional project note (persists automatically)."""
+        if isinstance(value, str) or value is None:
+            self._notes = value
+            if not self._init:
+                self.db.set(self.table, self.id, "notes", value)
+        else:
+            raise TypeError(f"'notes' must be str or None, but is {value.__class__.__name__}")
 
 
 if __name__ == '__main__':

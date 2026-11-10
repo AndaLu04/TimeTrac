@@ -10,6 +10,9 @@ class EntryType(StrEnum):
     KRANKHEIT = "Krankheit"
     URLAUB = "Urlaub"
     FEIERTAG = "Feiertag"
+    ELTERNZEIT = "Elternzeit"
+    UEBERSTUNDENAUSGLEICH = "Überstundenausgleich"
+    SONSTIGES = "Sonstiges"
     PLATZHALTER = "Platzhalter"
 
 class HourType(StrEnum):
@@ -21,11 +24,16 @@ class HourType(StrEnum):
 class Tables(Enum):
     projects = "projects"
     entries = "entries"
+    settings = "settings"
 
 
 ALLOWED_COLUMNS = {
-    Tables.projects: {"name", "target_hours", "hour_type", "is_default"},
-    Tables.entries: {"project_id", "entry_type", "is_active", "created_at", "edited_at", "entry_date", "begin_at", "end_at", "notes"}
+    Tables.projects: {"name", "target_hours", "hour_type", "is_default", "workdays",
+                     "daily_hours_override", "is_active", "notes"},
+    Tables.entries: {"project_id", "entry_type", "is_active", "created_at", "edited_at",
+                     "entry_date", "begin_at", "end_at", "notes", "break_minutes",
+                     "project_label", "counts_as_work", "deleted_at"},
+    Tables.settings: {"key", "value"},
 }
 
 if __name__ == "__main__":

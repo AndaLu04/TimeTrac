@@ -109,6 +109,20 @@ class Database:
 
         self._create_table_projects()
         self._create_table_entries()
+        self._create_table_settings()
+
+        self._migrate_columns(Tables.projects, {
+            "workdays": "TEXT NOT NULL DEFAULT '[0,1,2,3,4]'",
+            "daily_hours_override": "TEXT",
+            "is_active": "BOOLEAN NOT NULL DEFAULT 1",
+            "notes": "TEXT",
+        })
+        self._migrate_columns(Tables.entries, {
+            "break_minutes": "INTEGER NOT NULL DEFAULT 0",
+            "project_label": "TEXT",
+            "counts_as_work": "BOOLEAN",
+            "deleted_at": "datetime",
+        })
 
         init_sqlite_converters_and_adapters()
 
@@ -219,6 +233,38 @@ class Database:
                     target_hours REAL NOT NULL,
                     hour_type hour_type NOT NULL,
                     is_default BOOLEAN NOT NULL
+                );
+                """
+            )
+
+    def _migrate_columns(self, table: Tables, columns: dict[str, str]) -> None:
+        """
+        Additive Schema-Migration: fügt fehlende Spalten einer Tabelle hinzu.
+
+        Bestehende Spalten und Daten bleiben unangetastet; bereits vorhandene
+        Spalten werden übersprungen. So bleibt eine Bestandsdatenbank ohne
+        Cloud-Kopie migrierbar.
+
+        Args:
+            table: Die betroffene Tabelle.
+            columns: Mapping von Spaltenname zu SQL-Spaltendefinition.
+        """
+        with database_cursor(self.database_path) as cursor:
+            cursor.execute(f"PRAGMA table_info({table.name})")
+            existing = {row[1] for row in cursor.fetchall()}
+            for name, definition in columns.items():
+                if name not in existing:
+                    cursor.execute(f"ALTER TABLE {table.name} ADD COLUMN {name} {definition}")
+
+    def _create_table_settings(self) -> None:
+        """Create the settings table (key-value) if it doesn't exist."""
+        with database_cursor(self.database_path) as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings
+                (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
                 );
                 """
             )

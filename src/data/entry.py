@@ -56,6 +56,12 @@ class Entry:
         self._begin_at: Optional[datetime] = None
         self._end_at: Optional[datetime] = None
         self._notes: Optional[str] = None
+        self._break_minutes: Optional[int] = None
+        self._project_label: Optional[str] = None
+        self._counts_as_work: Optional[bool] = None
+        self._counts_as_work_loaded: bool = False
+        self._deleted_at: Optional[datetime] = None
+        self._deleted_at_loaded: bool = False
         self._duration: Optional[timedelta] = None
         self._init: bool = False
 
@@ -372,6 +378,87 @@ class Entry:
                 self.db.set(Tables.entries, self.id, "notes", value)
         else:
             raise TypeError(f"'notes' must be str, but is {value.__class__.__name__}")
+
+    @property
+    def break_minutes(self) -> int:
+        """
+        Get the break duration in minutes.
+
+        Returns:
+            The break minutes as an integer (default 0).
+        """
+        if self._break_minutes is None:
+            self._break_minutes = self.db.get(self.table, self.id, "break_minutes")
+        return self._break_minutes
+
+    @break_minutes.setter
+    def break_minutes(self, value: int) -> None:
+        """Set the break duration in minutes (persists automatically)."""
+        if isinstance(value, int) and value >= 0:
+            self._break_minutes = value
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "break_minutes", value)
+        else:
+            raise TypeError(f"'break_minutes' must be a non-negative integer, but is {value!r}")
+
+    @property
+    def project_label(self) -> str | None:
+        """Get the free-text activity label (not to be confused with project_id)."""
+        if self._project_label is None:
+            self._project_label = self.db.get(self.table, self.id, "project_label")
+        return self._project_label
+
+    @project_label.setter
+    def project_label(self, value: str | None) -> None:
+        """Set the free-text activity label (persists automatically)."""
+        if isinstance(value, str) or value is None:
+            self._project_label = value
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "project_label", value)
+        else:
+            raise TypeError(f"'project_label' must be str or None, but is {value.__class__.__name__}")
+
+    @property
+    def counts_as_work(self) -> bool | None:
+        """
+        Get whether this entry counts as work time.
+
+        None means: default per entry_type (see ARCHITECTURE.md 3.3).
+        """
+        if self._counts_as_work is None and not self._counts_as_work_loaded:
+            self._counts_as_work = self.db.get(self.table, self.id, "counts_as_work")
+            self._counts_as_work_loaded = True
+        return self._counts_as_work
+
+    @counts_as_work.setter
+    def counts_as_work(self, value: bool | None) -> None:
+        """Set whether this entry counts as work time (persists automatically)."""
+        if isinstance(value, bool) or value is None:
+            self._counts_as_work = value
+            self._counts_as_work_loaded = True
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "counts_as_work", value)
+        else:
+            raise TypeError(f"'counts_as_work' must be bool or None, but is {value.__class__.__name__}")
+
+    @property
+    def deleted_at(self) -> datetime | None:
+        """Get the soft-delete timestamp, or None if the entry is not deleted."""
+        if self._deleted_at is None and not self._deleted_at_loaded:
+            self._deleted_at = self.db.get(self.table, self.id, "deleted_at")
+            self._deleted_at_loaded = True
+        return self._deleted_at
+
+    @deleted_at.setter
+    def deleted_at(self, value: datetime | None) -> None:
+        """Set the soft-delete timestamp (persists automatically)."""
+        if isinstance(value, datetime) or value is None:
+            self._deleted_at = value
+            self._deleted_at_loaded = True
+            if not self._init:
+                self.db.set(Tables.entries, self.id, "deleted_at", value)
+        else:
+            raise TypeError(f"'deleted_at' must be datetime or None, but is {value.__class__.__name__}")
 
     @property
     def duration(self) -> timedelta:

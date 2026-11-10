@@ -4,388 +4,319 @@ Plattformunabhängige Zeiterfassungssoftware für (Frei-)Kirchen-Mitarbeitende.
 Python + Kivy, layerbasiert, statusbasiert (kein Live-Timer).
 
 Dieses Dokument ist die verbindliche Design-Grundlage für die Implementierung.
-Es beantwortet die offenen Fragen zu Datenstruktur, Klassenstruktur und listet
-die noch zu klärenden Entscheidungen am Ende auf.
+Es baut auf dem bereits vorhandenen Data-Layer des Branches `kivy_ui` auf
+(Priorisierung: bestehender Data-Layer vor neuem Konzept) und entwirft den
+Logic-Layer neu. Der UI-Prototyp gilt als verwerfbar; das tragfähige Konzept
+(Tab-Navigation, ScreenManager-Struktur) bleibt erhalten.
 
 ---
 
 ## 1. Ziele und Grundsätze
 
 1. **Plattformunabhängig**: Android, iOS, Windows, macOS, Linux (Kivy).
-2. **Statusbasiert**: Es existiert kein laufender Timer. Ein aktiver Zeitraum
-   ist ein Datenbankeintrag mit Status `ACTIVE`. Die Dauer wird in der UI aus
-   `start_time` und der aktuellen Uhrzeit **kontinuierlich berechnet**, ohne
-   erneut auf die Datenbank zuzugreifen.
-3. **Absturzsicherheit**: Da alles Persistierte in der Datenbank liegt, kann
-   die App nach einem Absturz ihren vollständigen Zustand wiederherstellen
-   (Stichwort: „State Restoration").
+2. **Statusbasiert**: Kein laufender Timer. Ein aktiver Zeitraum ist ein
+   Eintrag mit `is_active = 1`. Die Dauer wird in der UI kontinuierlich aus
+   `begin_at` und der aktuellen Uhrzeit berechnet, ohne erneute DB-Zugriffe.
+3. **Absturzsicherheit**: Alles Persistierte liegt in der Datenbank; die App
+   kann ihren Zustand nach einem Absturz vollständig wiederherstellen.
 4. **Layer-Trennung**: `data` → `logic` → `ui`. Kein Layer greift nach oben.
-5. **PEP 8**, sprechende Namen, keine Abkürzungen außer etablierten
-   Fachbegriffen (z. B. `csv`).
+5. **PEP 8**, sprechende Namen, deutsche Fachbegriffe dort, wo sie die
+   Domäne vorgibt (`EntryType`, `HourType` – wie im bestehenden Code).
 
 ### Nicht-Ziele (v1)
 
-- Kein echter Mehrbenutzer-Betrieb im Sinne einer Server-Anwendung; Sync
-  erfolgt später über einen abstrahierenden `SyncBackend` (Stub in v1).
-- Keine Lohn-/Gehaltsabrechnung. Die App liefert Ist/Soll/Überstunden als
-  Datenbasis, ersetzt aber keine Payroll-Logik.
+- Kein Mehrbenutzer-Serverbetrieb; Sync erfolgt später über ein
+  `SyncBackend`-Interface (v1: Stub).
+- Keine Gehaltsabrechnung. Die App liefert Ist/Soll/Überstunden als
+  Datenbasis.
 
 ---
 
-## 2. Architekturübersicht (Layer)
+## 2. Bestandsaufnahme: was aus `kivy_ui` übernommen wird
+
+### 2.1 Data-Layer (übernehmen, Priorität 1)
+
+Der bestehende Data-Layer ist ausgereift und wird **als Baseline** übernommen:
+
+| Baustein                        | Bewertung / Entscheidung                        |
+|---------------------------------|--------------------------------------------------|
+| `Database` mit generischem `set`/`get`/`insert_new_row` | behalten |
+| SQLite-Adapter/Converter für `date`, `datetime`, `EntryType`, `HourType` | behalten – saubere Typisierung direkt aus der DB |
+| `Entry` als Active Record mit Lazy Loading + Auto-Persistenz | behalten – Statuskonzept passt exakt dazu (`is_active`) |
+| `Project` als Active Record     | behalten                                          |
+| Tabellen `projects` / `entries` mit AUTOINCREMENT-IDs | behalten (siehe 3.4 zur Sync-Vorbereitung) |
+| `ALLOWED_COLUMNS`-Whitelist     | behalten – Schutz vor SQL-Injection über Spaltennamen |
+
+**Kleine Nachbesserungen am bestehenden Code** (kein Konzeptbruch, nur
+Robustheit):
+
+- `database.get_entry_ids_from_project_id` nutzt String-Interpolation statt
+  Parameterbindung → auf `?`-Platzhalter umstellen.
+- `Database.__init__` führt `PRAGMA foreign_keys = ON` ein (FKs werden sonst
+  von SQLite ignoriert).
+- Das auskommentierte Unique-Index auf `is_active = 1` aktivieren – es erzwingt
+  die Invariante „maximal ein aktiver Eintrag" auf DB-Ebene. Vorher prüfen:
+  der Index muss pro Datenbank einmalig sein (globales „ein aktiver Eintrag
+  über alle Projekte hinweg"). Falls später mehrere parallele Projekte
+  gleichzeitig laufen sollen, wird der Index auf `(project_id) WHERE
+  is_active = 1` erweitert.
+- `Project.entry_list` lädt beim Konstruieren **alle** Entries eager → auf
+  eine explizite Methode `load_entries()` bzw. Lazy-Property umstellen
+  (Performance bei großen Historien).
+
+### 2.2 Logic-Layer (neu entwerfen, Priorität gleichwertig)
+
+`src/logic/` existiert als Paket noch ohne Inhalt. Entwurf in Abschnitt 5.
+
+### 2.3 UI-Layer (Prototyp, verwerfbar)
+
+`src/ui/app.py` ist leer. Nur die Grundentscheidung bleibt: **Kivy
+App + ScreenManager**. Screens werden neu gebaut (Abschnitt 6), orientiert am
+Feature-Set der Anforderungen.
+
+---
+
+## 3. Datenmodell (auf bestehendem Schema aufbauend)
+
+**Grundsatz: In der Datenbank liegt nur, was der Nutzer eingibt oder was ein
+Status ist. Alles Abgeleitete (Dauern, Soll-, Ist-, Überstunden) wird zur
+Laufzeit berechnet.**
+
+### 3.1 Tabelle `projects` (bestehend, erweitert)
+
+Bestehende Spalten: `id`, `name`, `target_hours`, `hour_type`, `is_default`.
+
+**Erweiterungen (additive Migration):**
+
+| Spalte     | Typ    | Default      | Zweck                                              |
+|------------|--------|--------------|----------------------------------------------------|
+| `workdays` | TEXT   | `"[0,1,2,3,4]"` | JSON-Liste der Arbeitstage (ISO: Mo=0 … So=6) – **konfigurierbar** für Wochenendarbeit |
+| `is_active` | INTEGER | `1`        | Archivierung ohne Löschen                         |
+| `notes`    | TEXT   | NULL         | optionale Notiz                                    |
+
+**Zur Frage „reicht ein Feld für Sollstunden?": Ja.** Es bleibt bei
+`target_hours` als einzigem Stundenfeld; die Semantik ergibt sich aus
+`hour_type` (siehe 5.1). Die ursprünglich vorgeschlagenen Felder
+`weekly_hours`/`daily_hours`/`monthly_hours` entfallen. Das Muster
+„8 h Di + 8 h Mi" wird über `hour_type = DAILY` mit `target_hours = 8` und
+`workdays = [1, 2]` abgebildet. **Bekannte Einschränkung:** ungleiche Stunden
+pro Wochentag (z. B. 6 h Di + 8 h Mi) sind so nicht darstellbar; falls das
+praktisch vorkommt, wird später ein optionales JSON-Feld
+`daily_hours_override` ergänzt – kein Grund, das Modell jetzt zu verkomplizieren.
+
+### 3.2 Tabelle `entries` (bestehend, erweitert)
+
+Bestehende Spalten: `id`, `project_id`, `entry_type`, `is_active`,
+`created_at`, `edited_at`, `entry_date`, `begin_at`, `end_at`, `notes`.
+
+**Erweiterungen (additive Migration):**
+
+| Spalte           | Typ    | Default | Zweck                                          |
+|------------------|--------|---------|------------------------------------------------|
+| `break_minutes`  | INTEGER | `0`     | Pause (dt. Arbeitsrecht: ab 6 h ≥ 30 min)      |
+| `project_label`  | TEXT   | NULL    | freies Tätigkeitsfeld („Jugendgruppe") – nicht zu verwechseln mit `project_id` |
+| `deleted_at`     | TEXT   | NULL    | Soft Delete: Einträge in Überstundenberechnungen verschwinden nicht spurlos; Basis für spätere Sync-Konfliktauflösung |
+
+`entry_date` bleibt das fachliche Zuordnungsdatum (für Woche/Monat/Jahr),
+`begin_at`/`end_at` die Stempelzeiten – wie im bestehenden Schema.
+
+### 3.3 `EntryType` (bestehend, ergänzt)
+
+Bestehend: `ARBEIT`, `KRANKHEIT`, `URLAUB`, `FEIERTAG`, `PLATZHALTER`.
+Ergänzt werden die für das deutsche Arbeitsrecht fehlenden:
+
+```python
+class EntryType(StrEnum):
+    ARBEIT = "Arbeit"
+    KRANKHEIT = "Krankheit"
+    URLAUB = "Urlaub"
+    FEIERTAG = "Feiertag"
+    ELTERNZEIT = "Elternzeit"
+    UEBERSTUNDENAUSGLEICH = "Überstundenausgleich"
+    SONSTIGES = "Sonstiges"
+    PLATZHALTER = "Platzhalter"
+```
+
+Soll-Behandlung (zentrale Konstante im `OvertimeService`, Abschnitt 5.3):
+
+| Typ                    | Ist-Stunden      | Soll-Stunden                        |
+|------------------------|------------------|-------------------------------------|
+| Arbeit                 | zählt (netto von Pausen) | –                            |
+| Urlaub                 | –                | gilt als erfüllt (Entgeltfortzahlung) |
+| Krankheit              | –                | gilt als erfüllt (Entgeltfortzahlung) |
+| Feiertag               | –                | gilt als erfüllt (gesetzl./tariflich) |
+| **Elternzeit**         | –                | **scheidet aus** – rein informativer Eintrag, keine Gutschrift, keine Reduktion |
+| Überstundenausgleich   | –                | reduziert den Überstundenstand im Zeitraum |
+| Sonstiges              | zählt (konfigurierbar) | –                                  |
+| Platzhalter            | –                | –                                   |
+
+### 3.4 Sync-Vorbereitung (ohne Sync in v1)
+
+AUTOINCREMENT-IDs bleiben. Für den späteren Sync wird **additiv** eine
+`uuid`-Spalte (UUID4 als TEXT, bei Insert befüllt) ergänzt, sobald der erste
+`SyncBackend` implementiert wird – offline erzeugte Einträge kollidieren dann
+nicht. Konfliktstrategie: Last-Writer-Wins je Eintrag anhand `edited_at`;
+Soft-Deletes (Tombstones) gewinnen gegen Updates. `SyncBackend`-Interface
+(`push`/`pull`) als Stub in `data/sync/`, damit Logic und UI später nicht
+angefasst werden müssen.
+
+### 3.5 Einstellungen (neue Tabelle `settings`)
+
+Key-Value je Gerät (bewusst **nicht** synchronisiert):
+
+| key                    | Wert (Beispiel)                                  |
+|------------------------|--------------------------------------------------|
+| language               | `de` / `en`                                      |
+| active_project_id      | int (Vorauswahl beim Einstempeln)                |
+| default_break_minutes  | `0`                                              |
+| csv_delimiter          | `,` (frei eintragbar, Textfeld)                   |
+| sync_backend           | `none` (v1), später `webdav`, `gdrive`, `file`   |
+| sync_config            | JSON                                              |
+| last_backup_at         | ISO-Datum                                         |
+| dashboard_layout      | JSON (sichtbare/reihenfolgte Kacheln)            |
+
+### 3.6 Statuskonzept im Detail
 
 ```
-+-------------------------------------------------------------+
-| ui/            Kivy-Widgets, Screens, ViewModel-Adapter     |
-|                liest NUR aus logic-Services, nie aus data    |
-+-------------------------------------------------------------+
-| logic/         Services: TimeTrackingService,                |
-|                WorkingTimeModel, OvertimeService,             |
-|                ExportService, SettingsService, SyncService   |
-|                (pure Python, ohne Kivy-Import!)              |
-+-------------------------------------------------------------+
-| data/          Repositories (CRUD), SQLite-Schema,          |
-|                Migrationen, DTOs/Entitäten                   |
-+-------------------------------------------------------------+
+Einstempeln:  [kein aktiver Eintrag] → Entry(is_active=1, begin_at=now)
+Ausstempeln:  Entry(is_active=1)    → Entry(is_active=0, end_at=now)
+Anpassen:     begin_at/end_at/entry_date editierbar (end > begin, VALIDIERUNG im TrackingService)
+Löschen:      Entry → deleted_at = now (Soft Delete)
 ```
 
-**Regeln:**
+**Invarianten (im `TrackingService` erzwungen, zusätzlich durch den
+Unique-Index abgesichert):**
 
-- `logic` importiert niemals `kivy`.
-- `ui` importiert niemals `sqlite3` oder Repositories direkt.
-- `data` kennt keine Fachlogik (keine Überstundenberechnung im DataLayer).
-- Kommunikation UI ↔ Logic über Rückgabewerte und einen einfachen
-  `EventBus` (Observer-Pattern, Beobachtung von DB-Änderungen für
-  Live-Aktualisierung der Listen).
+- Maximal ein `is_active = 1`-Eintrag.
+- `end_at > begin_at` (falls gesetzt); `is_active = 0` ⟹ `end_at` gesetzt.
 
-### Paketstruktur
+Die Live-Uhr im Dashboard: `LiveDurationLabel` holt **einmal** den aktiven
+Eintrag und aktualisiert danach nur die Anzeige per `Clock.schedule_interval`
+gegen die Wanduhr – keine DB-Lesezugriffe pro Tick. Nach einem App-Neustart
+ergibt sich derselbe Stand aus `begin_at` → Status statt Timer, wie gefordert.
+
+---
+
+## 4. Paketstruktur
 
 ```
-timetrac/
-├── __main__.py
-├── app.py                     # Kivy-App-Einstieg, ScreenManager-Aufbau
-├── core/                      # Querschnitt
-│   ├── events.py              # EventBus
-│   ├── localization.py       # i18n (gettext, .po/.mo)
-│   └── errors.py              # fachliche Exceptions
-├── data/
-│   ├── entities.py            # dataclasses: Entry, Employer, Settings …
-│   ├── database.py            # Verbindung, Schema, Migrationen
-│   ├── repositories/
-│   │   ├── entry_repository.py
-│   │   ├── employer_repository.py
-│   │   └── settings_repository.py
-│   └── sync/                  # später: SyncBackend-Implementierungen
-│       └── sync_backend.py    # abstrakte Basisklasse (Stub v1)
-├── logic/
-│   ├── tracking_service.py    # Einstempeln/Ausstempeln/CRUD-Orchestrierung
-│   ├── working_time_model.py # Strategien für Sollstunden
-│   ├── overtime_service.py   # Wochen/Monat/Gesamt-Aggregationen
-│   ├── analysis_service.py   # Verlaufsansichten (Woche/Monat/Jahr/Total)
-│   ├── export_service.py     # CSV-Export
-│   └── settings_service.py
+src/
+├── constants.py               # EntryType, HourType, Tables (bestehend, ergänzt)
+├── data/                      # bestehend, erweitert
+│   ├── database.py            # Database (bestehend)
+│   ├── entry.py               # Entry (bestehend)
+│   ├── project.py             # Project (bestehend)
+│   ├── settings.py            # neu: SettingsRepository (Key-Value)
+│   └── sync/
+│       └── sync_backend.py    # neu: abstrakte Basisklasse (Stub v1)
+├── logic/                     # neu
+│   ├── tracking_service.py    # Ein-/Ausstempeln, Validierung, CRUD-Orchestrierung
+│   ├── working_time_model.py  # Sollstunden-Strategien je HourType
+│   ├── overtime_service.py    # Ist/Soll/Überstunden je Zeitraum
+│   ├── analysis_service.py    # Verlaufsansichten (DTOs für die UI)
+│   ├── export_service.py      # CSV-Export (Trennzeichen konfigurierbar)
+│   ├── settings_service.py
+│   └── backup_service.py      # manualer DB-Export/-Import
 ├── ui/
+│   ├── app.py                 # Kivy-App, ScreenManager
 │   ├── screens/
 │   │   ├── dashboard_screen.py
 │   │   ├── history_screen.py
 │   │   ├── entries_screen.py
 │   │   ├── entry_edit_screen.py
+│   │   ├── project_screen.py
 │   │   └── settings_screen.py
 │   ├── widgets/
-│   │   ├── live_duration_label.py   # statusbasierte Live-Uhr (Clock-Auswertung)
-│   │   └── …
-│   └── view_models/                # UI-Zustand je Screen
+│   │   └── live_duration_label.py
+│   └── view_models/
 └── resources/
-    ├── i18n/de/LC_MESSAGES/…
-    └── i18n/en/LC_MESSAGES/…
+    └── i18n/                  # gettext: de, en
 ```
+
+**Regeln:**
+
+- `logic` importiert niemals `kivy`.
+- `ui` importiert niemals `data` direkt, sondern nur `logic`-Services.
+- `data` enthält keine Fachlogik (keine Überstundenberechnung im DataLayer).
+- Live-Updates der UI über einen einfachen `EventBus` in `core/events.py`
+  (Screens registrieren sich für DB-Änderungsereignisse).
 
 ---
 
-## 3. Datenmodell
+## 5. Logic-Layer (Entwurf)
 
-**Grundsatz: In der Datenbank liegt nur, was der Nutzer eingibt oder was ein
-Status ist. Alles Abgeleitete (Dauern, Soll-, Ist-, Überstunden) wird zur
-Laufzeit berechnet.** Ausnahmen: `updated_at` (Technik) und der Sync-Status.
+### 5.1 Arbeitszeitmodelle (Strategy-Pattern auf `HourType`)
 
-### 3.1 Entitäten (logisch)
-
-#### Employer (Projekt/Arbeitgeber)
-
-| Feld            | Typ      | DB | Beschreibung                            |
-|-----------------|----------|----|-----------------------------------------|
-| id              | UUID     | ✔  | Primärschlüssel                         |
-| name            | TEXT     | ✔  | z. B. „Ev. Kirchengemeinde X"           |
-| notes            | TEXT     | ✔  | optional                                |
-| is_active       | BOOL     | ✔  | Archivierung ohne Löschen              |
-| created_at      | DATETIME | ✔  |                                         |
-| updated_at      | DATETIME | ✔  |                                         |
-
-#### WorkingTimeModel (Sollstunden-Modell je Employer)
-
-Das Modell gehört zum Arbeitgeber, damit ein Mitarbeiter mehrere Anstellungen
-mit unterschiedlichen Modellen verwalten kann.
-
-| Feld                    | Typ      | DB | Beschreibung                              |
-|-------------------------|----------|----|-------------------------------------------|
-| id                      | UUID     | ✔  |                                           |
-| employer_id             | UUID     | ✔  | FK Employer                               |
-| model_type              | ENUM     | ✔  | siehe 5.1                                 |
-| weekly_hours            | REAL     | ✔  | „Stundenanker" für WeeklyEven / WeeklyFlat|
-| daily_hours             | REAL     | ✔  | für DailySpecific (pro Wochentag)         |
-| monthly_hours           | REAL     | ✔  | für Monthly                               |
-| valid_from              | DATE     | ✔  | Modellwechsel ohne Historienverfälschung  |
-| valid_to                | DATE     | ✔  | NULL = offen                              |
-
-`daily_hours` wird als JSON-Spalte `{0: 8.0, 2: 8.0}` (Wochentag → Stunden,
-ISO-Nummerierung Montag=0) gespeichert. Nur für `model_type = DAILY_SPECIFIC`
-relevant.
-
-#### Entry (Zeiteintrag)
-
-| Feld            | Typ      | DB | Beschreibung                                     |
-|-----------------|----------|----|--------------------------------------------------|
-| id              | UUID     | ✔  |                                                   |
-| employer_id     | UUID     | ✔  | FK Employer                                       |
-| entry_type      | ENUM     | ✔  | WORK, VACATION, SICK_LEAVE, PARENTAL_LEAVE,       |
-|                 |          |    | TIME_OFF_IN_LIEU, PUBLIC_HOLIDAY, OTHER            |
-| status          | ENUM     | ✔  | ACTIVE, FINISHED, DRAFT                           |
-| start_time      | DATETIME | ✔  | Einstempel-Zeitpunkt                             |
-| end_time        | DATETIME | ✔  | NULL solange ACTIVE                              |
-| break_minutes   | INT      | ✔  | bezahlte Pause abziehen, Default 0                |
-| note            | TEXT     | ✔  | optional                                          |
-| project         | TEXT     | ✔  | optional (z. B. „Jugendgruppe")                    |
-| created_at      | DATETIME | ✔  |                                                   |
-| updated_at      | DATETIME | ✔  |                                                   |
-| deleted_at      | DATETIME | ✔  | Soft Delete (Wiederherstellung/History)          |
-
-**Nicht in der DB** (Laufzeitberechnung): `duration`, alle Soll-/Ist-/
-Überstundenwerte, Live-Dauer des aktiven Eintrags.
-
-**Warum UUIDs statt Autoincrement?** Sie sind die Voraussetzung für spätere
-Geräte-Synchronisation (offline erzeugte IDs kollidieren nicht).
-
-**Warum Soft Delete?** Einträge, die in Überstundenberechnungen eingingen,
-dürfen nicht spurbar verschwinden; außerdem Grundlage für Sync-Konfliktauflösung.
-
-#### Settings (Key-Value je Gerät)
-
-| key                    | Beispielwert                                       |
-|------------------------|----------------------------------------------------|
-| language               | `de` / `en`                                        |
-| active_employer_id     | UUID (Vorauswahl beim Einstempeln)                |
-| overtime_carryover     | bool – ob Überstunden monatlich verfallen sollen  |
-| default_break_minutes  | 0                                                  |
-| sync_backend           | `none` (v1), später `webdav`, `gdrive`, `file`     |
-| sync_config            | JSON (Backend-spezifisch)                          |
-| last_sync_at           | ISO-Datum                                          |
-
-Gerätebezogene Einstellungen leben bewusst **nicht** in den zu synchronisierenden
-Fachdaten.
-
-### 3.2 SQLite-Schema (Auszug)
-
-```sql
-CREATE TABLE employer (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    notes       TEXT,
-    is_active   INTEGER NOT NULL DEFAULT 1,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
-);
-
-CREATE TABLE working_time_model (
-    id            TEXT PRIMARY KEY,
-    employer_id   TEXT NOT NULL REFERENCES employer(id),
-    model_type    TEXT NOT NULL CHECK (model_type IN
-                  ('WEEKLY_EVEN','WEEKLY_FLAT','DAILY_SPECIFIC','MONTHLY')),
-    weekly_hours  REAL,
-    daily_hours   TEXT,   -- JSON {weekday: hours}
-    monthly_hours REAL,
-    valid_from    TEXT NOT NULL,
-    valid_to      TEXT
-);
-
-CREATE TABLE entry (
-    id             TEXT PRIMARY KEY,
-    employer_id    TEXT NOT NULL REFERENCES employer(id),
-    entry_type     TEXT NOT NULL CHECK (entry_type IN
-                   ('WORK','VACATION','SICK_LEAVE','PARENTAL_LEAVE',
-                    'TIME_OFF_IN_LIEU','PUBLIC_HOLIDAY','OTHER')),
-    status         TEXT NOT NULL CHECK (status IN ('ACTIVE','FINISHED','DRAFT')),
-    start_time     TEXT NOT NULL,
-    end_time       TEXT,
-    break_minutes  INTEGER NOT NULL DEFAULT 0,
-    note           TEXT,
-    project        TEXT,
-    created_at     TEXT NOT NULL,
-    updated_at     TEXT NOT NULL,
-    deleted_at     TEXT
-);
-
-CREATE INDEX idx_entry_start_time ON entry(start_time);
-CREATE INDEX idx_entry_employer   ON entry(employer_id);
-CREATE INDEX idx_entry_status     ON entry(status);
-
-CREATE TABLE settings (
-    key         TEXT PRIMARY KEY,
-    value       TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
-);
-```
-
-Alle Datumsangaben als **ISO 8601 UTC** (`datetime.isoformat()`); die UI
-konvertiert in lokale Zeit. Das verhindert Fehler bei Zeitumstellung und
-ist Sync-freundlich.
-
-### 3.3 Statuskonzept im Detail
-
-```
-Einstempeln:  [kein aktiver Eintrag] → Entry(status=ACTIVE, start_time=now)
-Ausstempeln:  Entry(status=ACTIVE)  → Entry(status=FINISHED, end_time=now)
-Anpassen:     start_time/end_time editierbar (VALIDIERUNG: end > start)
-Löschen:      Entry → deleted_at = now (Soft Delete)
-```
-
-**Invarianten (in `tracking_service` erzwungen):**
-
-- Pro Employer maximal **ein** `ACTIVE`-Eintrag gleichzeitig.
-- `end_time > start_time` (falls gesetzt).
-- `status = FINISHED` ⟹ `end_time IS NOT NULL`.
-
-Die Live-Uhr im Dashboard: `LiveDurationLabel` holt sich **einmal** den aktiven
-Eintrag beim Screen-Aufbau und aktualisiert danach nur noch die Anzeige mit
-`Clock.schedule_interval` gegen die Wanduhr – **keine** DB-Lesezugriffe pro Tick.
-Nach einem App-Neustart ergibt sich derselbe Stand aus `start_time` – damit ist
-das „Status statt Timer"-Prinzip erfüllt.
-
----
-
-## 4. Zeit-Typen (Deutsches Arbeitsrecht)
-
-| Typ               | DB-Wert           | Zählt als Arbeitszeit | Anmerkung                          |
-|-------------------|-------------------|:---------------------:|------------------------------------|
-| Arbeit            | `WORK`            | ja                    | Normalfall                         |
-| Urlaub            | `VACATION`        | ja (Soll)             | zählt als erfüllte Sollstunden     |
-| Elternzeit        | `PARENTAL_LEAVE`  | je Konfiguration      | in v1: zählt als erfülltes Soll     |
-| Krankheit          | `SICK_LEAVE`      | ja (Soll)             | Entgeltfortzahlung → Soll gilt     |
-| Überstundenausgleich| `TIME_OFF_IN_LIEU`| negativ auf Überstunden | Freizeitausgleich für Überstunden |
-| Feiertag           | `PUBLIC_HOLIDAY`  | ja (Soll)             |                                    |
-| Sonstiges          | `OTHER`           | konfigurierbar       | z. B. Fortbildung, Dienstfahrt     |
-
-Das Mapping Typ → Soll-Behandlung liegt als Konstante in
-`logic/overtime_service.py` und ist bewusst zentral, weil sich hier
-arbeitsrechtliche Semantik bündelt.
-
----
-
-## 5. Arbeitszeitmodelle (Strategy-Pattern)
-
-### 5.1 Modelltypen
-
-```python
-class WorkingTimeModelType(Enum):
-    WEEKLY_EVEN     = "WEEKLY_EVEN"      # Wochenstunden gleichverteilt
-    WEEKLY_FLAT     = "WEEKLY_FLAT"      # Wochenstunden pauschal (keine Tagesaufteilung)
-    DAILY_SPECIFIC  = "DAILY_SPECIFIC"   # feste Stunden je Wochentag
-    MONTHLY         = "MONTHLY"           # Monatsstunden
-```
-
-Jeder Typ implementiert das gemeinsame Interface:
+Der bestehende `HourType` (`ALLTIME`, `MONTHLY`, `WEEKLY`, `DAILY`) wird
+umgesetzt als Strategien mit **einem** Stundenanker `target_hours`:
 
 ```python
 class AbstractWorkingTimeModel(ABC):
     @abstractmethod
-    def target_hours_for_day(self, date: date) -> float: ...
+    def target_hours_for_day(self, day: date) -> float: ...
     @abstractmethod
     def target_hours_for_week(self, iso_year: int, iso_week: int) -> float: ...
     @abstractmethod
     def target_hours_for_month(self, year: int, month: int) -> float: ...
     @abstractmethod
-    def target_hours_for_year(self, year: int) -> float: ...
-    @abstractmethod
     def target_hours_total(self, since: date | None = None) -> float: ...
 ```
 
-Die **Sollstunden-Variable** (`weekly_hours`, `daily_hours`, `monthly_hours`)
-ist der „Ankerpunkt" der Formeln:
+| HourType    | `target_hours` bedeutet | Tagesformel                                  | Beispiele                       |
+|-------------|-------------------------|----------------------------------------------|---------------------------------|
+| `WEEKLY`    | Stunden pro Woche       | gleichverteilt auf `workdays`               | 40 h Pastor (Mo–Fr → 8 h/Tag)   |
+| `DAILY`     | Stunden pro Arbeitstag | `target_hours` an jedem Tag in `workdays`   | Teilzeit 8 h Di + 8 h Mi         |
+| `MONTHLY`   | Stunden pro Monat      | **pauschal**: Monat = `target_hours`; Teilzeiträume werden anteilig nach Arbeitstagen hochgerechnet | 20 h Werkstudent                |
+| `ALLTIME`   | Gesamtvolumen (Stunden)| Zeitraumanteil nach Arbeitstagen            | Projektauftrag „300 h gesamt"  |
 
-| Modell            | Tagesformel                                  | Beispiel                    |
-|-------------------|----------------------------------------------|-----------------------------|
-| `WEEKLY_EVEN`     | `weekly_hours / 5` (Mo–Fr)                   | 40 h → 8 h/Tag              |
-| `WEEKLY_FLAT`     | Tagesformel undefiniert; nur Woche/Monat     | 20 h Werkstudent            |
-| `DAILY_SPECIFIC`  | Lookup `daily_hours[weekday]`, sonst 0       | Teilzeit Di+Mi je 8 h       |
-| `MONTHLY`         | `monthly_hours / Arbeitstage des Monats`     | Pastor: 40 h/Woche als Monatspauschale |
+`MONTHLY` ist bewusst **pauschal** (Entscheidung): Die Woche erhält
+`target_hours × (Arbeitstage der Woche / Arbeitstage des Monats)`, der Monat
+exakt `target_hours`. Keine kalendergenaue Tagesverteilung.
 
-`MONTHLY` verteilt auf die werktäglichen Arbeitstage des konkreten Monats
-(kalendergenau), damit Wochen-/Monatsansichten konsistent bleiben.
+`workdays` (projektspezifisch, default Mo–Fr) macht Wochenendarbeit
+abbildbar: ein Di–Sa-Pastor mit `WEEKLY/40` verteilt auf `[1,2,3,4,5]`
+(Tue–Sat) → 8 h je Tag inkl. Samstag.
 
-### 5.2 Überstundenberechnung
+### 5.2 TrackingService
 
-Aggregation je Zeitraum (Woche/Monat/Jahr/Gesamt):
+```python
+class TrackingService:
+    def clock_in(self, project: Project, entry_type: EntryType = EntryType.ARBEIT) -> Entry: ...
+    def clock_out(self, entry: Entry) -> Entry: ...
+    def update_times(self, entry: Entry, begin_at: datetime, end_at: datetime | None) -> Entry: ...
+    def delete_entry(self, entry: Entry) -> None:      # Soft Delete
+    def get_active_entry(self) -> Entry | None: ...
+```
+
+Der Service ist die einzige Stelle, die die Invarianten aus 3.6 prüft und
+`edited_at` setzt. Die Active-Record-Persistenz des bestehenden Data-Layers
+bleibt dabei unangetastet – der Service orchestriert nur.
+
+### 5.3 OvertimeService
 
 ```
-ist_hours   = Σ duration(WORK-Entries, netto von Pausen)
-              + Σ target_credit(VACATION, SICK_LEAVE, PUBLIC_HOLIDAY, …)
-soll_hours  = Σ target_hours je Modell (nur WORK-Tage, Feiertage ausgenommen)
+ist_hours   = Σ duration(ARBEIT-Entries, netto von break_minutes)
+              + Gutschrift-Logik je EntryType (Tabelle in 3.3)
+soll_hours  = Σ target_hours je Zeitraum (nur Tage in workdays;
+              Feiertags-Entries gelten als erfülltes Soll)
 overtime    = ist_hours − soll_hours
 ```
 
-- **ÜberstundenWoche / ÜberstundenMonat**: Überstunden der aktuellen
-  Kalenderwoche / des aktuellen Kalendermonats (ISO-Woche).
+- **ÜberstundenWoche**: laufende ISO-Kalenderwoche.
+- **ÜberstundenMonat**: laufender Kalendermonat.
 - **ÜberstundenInsgesamt**: kumulierte Differenz seit dem frühesten Eintrag
-  bzw. einem konfigurierbaren Startdatum (`overtime_carryover`-Logik: monatlich
-  verfallene Überstunden fließen ab dem Stichtag nicht mehr ein).
-- `TIME_OFF_IN_LIEU`-Einträge reduzieren den Überstundenstand im Zeitraum,
-  in dem sie liegen.
+  – **ohne Verfall** (Entscheidung). `UEBERSTUNDENAUSGLEICH`-Einträge
+  reduzieren den Bestand im Zeitraum, in dem sie liegen.
+- **Keine Gleitzeitbandbreite** (Entscheidung): jede Minute über Soll zählt.
+- Alle Werte sind reine Funktionen der DB-Inhalte → reproduzierbar, keine
+  Zwischenspeicher.
 
-Alle Werte sind **reine Funktionen** der DB-Inhalte → jederzeit reproduzierbar,
-keine Gefahr inkonsistenter Zwischenspeicher.
-
----
-
-## 6. Klassenstruktur (Kern)
-
-```python
-# data/entities.py – reine Datenbehälter
-@dataclass(frozen=True)
-class Employer: ...
-@dataclass(frozen=True)
-class WorkingTimeModel: ...
-@dataclass(frozen=True)
-class Entry:
-    ...
-    def duration(self) -> timedelta | None:   # reine Hilfsberechnung, kein DB-Zugriff
-        ...
-
-# data/repositories/*.py – nur CRUD + Abfragen
-class EntryRepository:
-    def get_active(self, employer_id: UUID) -> Entry | None: ...
-    def list_between(self, start: datetime, end: datetime) -> list[Entry]: ...
-    def save(self, entry: Entry) -> None: ...
-    def soft_delete(self, entry_id: UUID) -> None: ...
-
-# logic – Fachlogik
-class TrackingService:        # Einstempeln, Ausstempeln, Validierung, CRUD-Orchestrierung
-class OvertimeService:        # ist/soll/overtime je Zeitraum
-class AnalysisService:        # Verlaufsansichten (liefert DTOs für die UI)
-class ExportService:          # CSV (utf-8-sig, ; oder , konfigurierbar)
-class SettingsService:        # key-value mit Typvalidierung
-class SyncService:            # nutzt SyncBackend-Interface (v1: no-op)
-
-# data/sync/sync_backend.py
-class SyncBackend(ABC):
-    def push(self, snapshot: SyncSnapshot) -> None: ...
-    def pull(self) -> SyncSnapshot | None: ...
-```
-
-### DTOs für die UI (Beispiel)
+### 5.4 AnalysisService (DTOs für die UI)
 
 ```python
 @dataclass(frozen=True)
-class PeriodSummary:          # Rückgabetyp von AnalysisService
-    period_type: Literal["week","month","year","total"]
+class PeriodSummary:
+    period_type: Literal["week", "month", "year", "total"]
     start: date
     end: date
     target_hours: float
@@ -394,74 +325,78 @@ class PeriodSummary:          # Rückgabetyp von AnalysisService
     entries: list[Entry]
 ```
 
-Die UI-Screens halten ausschließlich solche DTOs + den aktiven Entry und sind
-damit trivial testbar.
+Verlaufsansichten Woche/Monat/Jahr/Insgesamt liefern genau diese DTOs.
+
+### 5.5 ExportService / BackupService
+
+- **CSV**: UTF-8, Spalten je Eintrag (Datum, Beginn, Ende, Pause, Typ,
+  Projekt, Notiz, Dauer); **Trennzeichen frei eintragbar** (Textfeld,
+  Default `,`); Dezimaltrennzeichen folgt der Sprache.
+- **Backup**: manueller DB-Export – die SQLite-Datei wird über den nativen
+  Datei-Dialog an einen vom Nutzer gewählten Ort kopiert (und von dort
+  importierbar). Kein automatischer Cloud-Backup in v1.
+
+### 5.6 Feiertage
+
+Manuelle Eintragung als `FEIERTAG`-Entry (Entscheidung). Optionaler,
+späterer **Kalender-Import** (ICS-Datei über den Datei-Dialog) erzeugt
+automatisch Feiertags-Entries für ein Jahr/Bundesland – als eigener Service
+`logic/holiday_import_service.py`, da die manuelle Eintragung vollständig
+unabhängig davon funktioniert.
 
 ---
 
-## 7. UI-Konzept (Kivy)
+## 6. UI-Konzept (Kivy)
 
 - `ScreenManager` mit Screens: Dashboard, Verlauf, Einträge, Eintrag-Editor,
-  Einstellungen.
-- **Dashboard**: Live-Dauer-Label (statusbasiert, s. 3.3), WochenSoll,
+  Projekte, Einstellungen.
+- **Dashboard**: Live-Dauer-Label (statusbasiert, s. 3.6), WochenSoll,
   WochenIst, ÜberstundenWoche, ÜberstundenMonat, ÜberstundenInsgesamt;
-  Kacheln sind ein-/ausblendbar und neu anordenbar (per Drag & Drop in
-  `RecycleGridLayout`); Layout wird in `settings` als JSON gespeichert.
-- **Verlauf**: Tabs/Filter Woche · Monat · Jahr · Insgesamt mit
+  Kacheln ein-/ausblendbar und umsortierbar (`RecycleGridLayout`), Layout
+  als JSON in `settings`.
+- **Verlauf**: Filter Woche · Monat · Jahr · Insgesamt mit
   `PeriodSummary`-Inhalten.
-- **Einträge**: `RecycleView`-Liste, sortiert nach `start_time` (neu → alt),
+- **Einträge**: `RecycleView`-Liste, sortiert nach `begin_at` (neu → alt),
   Tap öffnet Editor.
-- **Einstellungen**: Sprache, Arbeitgeber + Arbeitszeitmodelle verwalten,
-  Pausen-Default, Überstunden-Verfall, Sync (v1 nur „kein Sync").
-- **i18n**: gettext, `_()`-Auferuf in allen Screens; Sprachwechsel ohne
-  Neustart (Neuaufbau der Screens).
+- **Einstellungen**: Sprache, Projekte + Arbeitszeitmodelle + Arbeitstage,
+  Pausen-Default, CSV-Trennzeichen, Backup-Export/-Import, Sync (v1 „kein").
+- **i18n**: gettext, `_()` in allen Screens; Sprachwechsel ohne Neustart
+  (Neuaufbau der Screens). Enum-Werte in der DB bleiben deutsch (bestehender
+  Data-Layer), Anzeige übersetzt über Mapping.
 
 ---
 
-## 8. Sync (Design jetzt, Implementierung später)
+## 7. Getroffene Entscheidungen (aus Review)
 
-- Einzige Sync-Einheit: die SQLite-Datei bzw. ein exportierter
-  `SyncSnapshot` (JSON) mit den Tabellen `employer`,
-  `working_time_model`, `entry` + `last_sync_at`.
-- Konfliktstrategie: **Last-Writer-Wins je Eintrag** anhand `updated_at`;
-  Soft-Deletes gewinnen gegen Updates (Tombstones).
-- UUIDs machen offline erzeugte Einträge kollisionsfrei.
-- `SyncBackend`-Interface erlaubt spätere Implementierungen:
-  `WebDavBackend`, `GoogleDriveBackend`, `FileBackend` (nativer
-  File-Manager / geteiltes Verzeichnis), ohne dass Logic oder UI angefasst
-  werden müssen.
+| Frage                      | Entscheidung                                        |
+|----------------------------|----------------------------------------------------|
+| Elternzeit                 | scheidet aus – rein informativ, keine Sollgutschrift |
+| Überstundenverfall         | kein Verfall – kumuliert seit erstem Eintrag        |
+| Arbeitstage                | pro Projekt konfigurierbar (`workdays`), Wochenendarbeit möglich |
+| Gleitzeit/Puffer           | keine Bandbreite – jede Minute zählt               |
+| Feiertage                  | manuell, optionaler ICS-Kalender-Import später      |
+| Monatsmodell               | pauschal (Monat = `target_hours`, Woche anteilig)   |
+| CSV-Format                 | Trennzeichen frei eintragbar, Default `,`          |
+| Backup                     | manueller DB-Export (Datei-Dialog)                 |
+| Sollstunden-Felder         | **ein** Feld `target_hours`, Semantik via `hour_type` (wie im bestehenden Schema) |
 
----
+## 8. Verbleibende offene Fragen
 
-## 9. Offene Fragen (nächste Schritte)
+1. **Ungleiche Tagesstunden** (z. B. 6 h Di + 8 h Mi): aktuell nicht
+   abbildbar; optional späteres `daily_hours_override`-JSON-Feld.
+2. **Parallele aktive Einträge**: Genau ein aktiver Eintrag global
+   (der Unique-Index) – oder je Projekt einer? Design geht von global aus.
+3. **Sonstiges (`SONSTIGES`)**: zählt defaultmäßig als Arbeitszeit –
+   konfigurierbar pro Eintrag oder global?
+4. **ALLTIME-Modell**: Für v1 wirklich benötigt oder erst später aktivieren?
 
-1. **Elternzeit**: zählt sie als erfüllte Sollstunden oder scheidet sie
-   (wie arbeitsrechtlich üblich) aus der Sollarbeitszeit aus? → Entscheidung
-   vor Implementierung des `entry_type`-Mappings.
-2. **Überstundenverfall**: Sollen Überstunden monatlich/jährlich verfallen
-   (Kirchen haben oft eigene Dienstvereinbarungen)? Konfigurierbar über
-   `overtime_carryover`, aber der Default muss definiert werden.
-3. **Arbeitstag-Definition**: Ist Montag–Freitag fix oder pro Employer
-   konfigurierbar (z. B. Pastor mit Samstagsdienst)?
-4. **Gleitzeit/Puffer**: Soll es eine tägliche Gleitzeitbandbreite geben
-   (±x Minuten gelten als 0 Überstunden)?
-5. **Feiertage**: Manuell eintragen oder automatischer Feiertagskalender
-   (Bundesland!)?
-6. **Monatsmodell**: Pauschale 40 h/Woche als 160–176 h/Monat oder
-   kalendergenaue Verteilung? (Design aktuell: kalendergenau.)
-7. **CSV-Format**: deutsches Format (`;`, Dezimalkomma) vs. internationales
-   Format – oder beides wählbar?
-8. **Backup**: Reicht der Sync als Backup, oder soll es zusätzlich einen
-   manuellen DB-Export/Import geben (empfohlen für v1)?
+## 9. Umsetzungsreihenfolge (Vorschlag)
 
----
-
-## 10. Umsetzungsreihenfolge (Vorschlag)
-
-1. `data` (Schema, Entities, Repositories) + Tests
-2. `logic` (Modelle, TrackingService, OvertimeService) + Tests
-3. `ui` Dashboard + Ein-/Ausstempeln
-4. Einträge-Liste + Editor
-5. Verlauf + Export
-6. Einstellungen + i18n
-7. Sync-Backends (WebDAV zuerst)
+1. Data-Layer-Nachbesserungen (2.1) + additive Migrationen (3.1, 3.2, 3.5) + Tests
+2. `logic`: WorkingTimeModel-Strategien + OvertimeService + Tests
+3. `logic`: TrackingService + Tests
+4. `ui`: Dashboard + Ein-/Ausstempeln
+5. Einträge-Liste + Editor
+6. Verlauf + CSV-Export + Backup
+7. Einstellungen + i18n
+8. Sync-Backends (WebDAV zuerst), optionaler ICS-Feiertagsimport

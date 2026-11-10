@@ -20,7 +20,8 @@ class OvertimeService:
     def __init__(self, db: Database):
         self.db = db
 
-    def _entries_between(self, project: Project, start: date, end: date) -> list[Entry]:
+    def entries_between(self, project: Project, start: date, end: date) -> list[Entry]:
+        """Nicht gelöschte Einträge eines Projekts im Zeitraum (nach entry_date)."""
         with database_cursor(self.db.database_path) as cursor:
             cursor.execute(
                 "SELECT id FROM entries "
@@ -43,7 +44,7 @@ class OvertimeService:
         Überstundenausgleich reduziert die Ist-Stunden des Zeitraums.
         """
         total = timedelta()
-        for entry in self._entries_between(project, start, end):
+        for entry in self.entries_between(project, start, end):
             if entry.entry_type == EntryType.UEBERSTUNDENAUSGLEICH:
                 total -= entry.duration
             elif entry.entry_type == EntryType.ARBEIT or entry.counts_as_work:
@@ -56,7 +57,7 @@ class OvertimeService:
         (Urlaub/Krankheit/Feiertag) gelten als erfülltes Soll.
         """
         model = get_working_time_model(project, self.db)
-        absence_dates = self._absence_dates(self._entries_between(project, start, end))
+        absence_dates = self._absence_dates(self.entries_between(project, start, end))
         total = 0.0
         current = start
         while current <= end:

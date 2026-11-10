@@ -14,6 +14,7 @@ class TestProject(unittest.TestCase):
     def setUp(self):
         import os
         import tempfile
+
         self._tmp = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self._tmp.name, "test.db")
         self.db = Database(database_path=self.db_path)
@@ -24,9 +25,13 @@ class TestProject(unittest.TestCase):
     def test_new_project_is_persisted(self):
         project = Project(self.db, None, "Jugendarbeit", 20.0, HourType.WEEKLY, False)
         self.assertIn(project.id, self.db.get_all_project_ids())
-        self.assertEqual(self.db.get(Tables.projects, project.id, "name"), "Jugendarbeit")
+        self.assertEqual(
+            self.db.get(Tables.projects, project.id, "name"), "Jugendarbeit"
+        )
         self.assertEqual(self.db.get(Tables.projects, project.id, "target_hours"), 20.0)
-        self.assertEqual(self.db.get(Tables.projects, project.id, "hour_type"), HourType.WEEKLY)
+        self.assertEqual(
+            self.db.get(Tables.projects, project.id, "hour_type"), HourType.WEEKLY
+        )
         self.assertEqual(self.db.get(Tables.projects, project.id, "is_default"), False)
 
     def test_new_project_defaults(self):
@@ -92,6 +97,7 @@ class TestProject(unittest.TestCase):
 
     def test_entry_list_returns_project_entries(self):
         from data.entry import Entry
+
         project = Project(self.db, None, "Mit Einträgen")
         Entry(self.db, None, project.id)
         Entry(self.db, None, project.id)
@@ -104,6 +110,7 @@ class TestProject(unittest.TestCase):
     def test_load_entries_discards_cache(self):
         """load_entries must bypass the cached entry list."""
         from data.entry import Entry
+
         project = Project(self.db, None, "Cache-Test")
         self.assertEqual(project.entry_list, [])
         Entry(self.db, None, project.id)

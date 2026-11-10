@@ -6,6 +6,11 @@ from data.project import Project
 
 
 class TestProject(unittest.TestCase):
+    """Tests Project persistence, lazy loading and type validation.
+
+    Each test uses its own temporary database file.
+    """
+
     def setUp(self):
         import os
         import tempfile
@@ -31,6 +36,7 @@ class TestProject(unittest.TestCase):
         self.assertEqual(project.is_default, False)
 
     def test_load_existing_project_lazily(self):
+        """Loading by ID must fetch all fields lazily from the database."""
         created = Project(self.db, None, "Büroarbeit", 15.0, HourType.DAILY, True)
         loaded = Project(self.db, created.id)
         self.assertEqual(loaded.name, "Büroarbeit")
@@ -96,6 +102,7 @@ class TestProject(unittest.TestCase):
         self.assertTrue(all(entry.project_id == project.id for entry in entries))
 
     def test_load_entries_discards_cache(self):
+        """load_entries must bypass the cached entry list."""
         from data.entry import Entry
         project = Project(self.db, None, "Cache-Test")
         self.assertEqual(project.entry_list, [])

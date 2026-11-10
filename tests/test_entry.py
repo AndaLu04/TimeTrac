@@ -8,6 +8,11 @@ from data.project import Project
 
 
 class TestEntry(unittest.TestCase):
+    """Tests Entry persistence, lazy loading, type validation and duration.
+
+    Each test uses its own temporary database file and project.
+    """
+
     def setUp(self):
         import os
         import tempfile
@@ -21,6 +26,7 @@ class TestEntry(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_new_entry_requires_project_id(self):
+        """Creating a new entry without a project must fail."""
         with self.assertRaises(ValueError):
             Entry(self.db, None, None)
 
@@ -149,6 +155,7 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(entry.calculate_duration(entry.end_at), timedelta(hours=4))
 
     def test_calculate_duration_uses_now_when_open(self):
+        """Without an explicit end, duration is measured against now."""
         begin = datetime.now() - timedelta(minutes=10)
         entry = Entry(self.db, None, self.project_id, begin_at=begin)
         duration = entry.calculate_duration()
@@ -175,6 +182,7 @@ class TestEntry(unittest.TestCase):
         self.assertGreater(second, first)
 
     def test_duration_recomputed_after_end_at_change(self):
+        """Changing end_at must invalidate the cached duration."""
         entry = Entry(self.db, None, self.project_id,
                       begin_at=datetime(2024, 1, 1, 8, 0, 0),
                       end_at=datetime(2024, 1, 1, 9, 0, 0))
@@ -182,6 +190,7 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(entry.duration, timedelta(hours=2))
 
     def test_duration_recomputed_after_begin_at_change(self):
+        """Changing begin_at must invalidate the cached duration."""
         entry = Entry(self.db, None, self.project_id,
                       begin_at=datetime(2024, 1, 1, 8, 0, 0),
                       end_at=datetime(2024, 1, 1, 9, 0, 0))
@@ -190,6 +199,7 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(entry.duration, timedelta(hours=2))
 
     def test_is_active_persisted_and_unique(self):
+        """is_active must persist and stay unique across the database."""
         from sqlite3 import IntegrityError
         entry = Entry(self.db, None, self.project_id, is_active=True)
         self.assertTrue(Entry(self.db, entry.id).is_active)

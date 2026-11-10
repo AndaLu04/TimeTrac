@@ -6,6 +6,8 @@ from data.database import Database, database_cursor, init_sqlite_converters_and_
 
 
 class TestConstants(unittest.TestCase):
+    """Tests the constants and enums used across the data layer."""
+
     def test_entry_type_values(self):
         self.assertEqual(EntryType.ARBEIT, "Arbeit")
         self.assertEqual(EntryType.KRANKHEIT, "Krankheit")
@@ -36,6 +38,11 @@ class TestConstants(unittest.TestCase):
 
 
 class TestDatabaseBasics(unittest.TestCase):
+    """Tests Database CRUD operations and schema guarantees.
+
+    Each test uses its own temporary database file.
+    """
+
     def setUp(self):
         import os
         import tempfile
@@ -126,11 +133,13 @@ class TestDatabaseBasics(unittest.TestCase):
         self.assertEqual(self.db.get_entry_ids_from_project_id(999), [])
 
     def test_foreign_key_enforced(self):
+        """Entries referencing a non-existent project must be rejected."""
         from sqlite3 import IntegrityError
         with self.assertRaises(IntegrityError):
             self._insert_entry(self.db, project_id=999)
 
     def test_only_one_active_entry_allowed(self):
+        """The partial unique index must allow only one active entry."""
         from sqlite3 import IntegrityError
         project = self._insert_project(self.db)
         self._insert_entry(self.db, project, is_active=True)
@@ -144,6 +153,7 @@ class TestDatabaseBasics(unittest.TestCase):
         self.assertEqual(len(self.db.get_entry_ids_from_project_id(project)), 2)
 
     def test_date_time_and_enum_roundtrip(self):
+        """Registered adapters/converters must preserve Python types."""
         project = self._insert_project(self.db)
         entry_id = self._insert_entry(self.db, project)
         self.assertEqual(self.db.get(Tables.entries, entry_id, "created_at"),
@@ -161,6 +171,7 @@ class TestDatabaseBasics(unittest.TestCase):
                          datetime(2024, 1, 2, 9, 30, 0))
 
     def test_init_converters_idempotent(self):
+        """Repeated converter registration must not break type handling."""
         init_sqlite_converters_and_adapters()
         init_sqlite_converters_and_adapters()
         project = self._insert_project(self.db)
@@ -169,6 +180,7 @@ class TestDatabaseBasics(unittest.TestCase):
                          EntryType.ARBEIT)
 
     def test_database_reopened_keeps_data(self):
+        """Reopening the database file must not lose persisted data."""
         row_id = self._insert_project(self.db, name="Persistiert")
         reopened = Database(database_path=self.db_path)
         self.assertEqual(reopened.get(Tables.projects, row_id, "name"), "Persistiert")

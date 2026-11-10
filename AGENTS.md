@@ -3,7 +3,7 @@
 Vor jeder Aufgabe lesen. Bei Widerspruch zum Code: Nutzer fragen.
 
 ## Projekt
-- Arbeitszeiterfassung für Kirchen-Angestellte, **Einzelnutzer**, Desktop, UI/Doku Deutsch.
+- Arbeitszeiterfassung für Kirchen-Angestellte, **Einzelnutzer**, Mobile first, Desktop second, UI/Doku Deutsch.
 - Stack: Python ≥ 3.10, Kivy ≥ 2.2, lokale Datenhaltung (SQLite/JSON), pytest.
 - Keine Cloud, keine Netzwerkdienste, keine neuen Abhängigkeiten ohne Not.
 

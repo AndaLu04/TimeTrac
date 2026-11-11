@@ -16,6 +16,7 @@ class TestEntry(unittest.TestCase):
     def setUp(self):
         import os
         import tempfile
+
         self._tmp = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self._tmp.name, "test.db")
         self.db = Database(database_path=self.db_path)
@@ -49,10 +50,18 @@ class TestEntry(unittest.TestCase):
     def test_new_entry_with_explicit_values(self):
         begin = datetime(2024, 5, 1, 8, 0, 0)
         end = datetime(2024, 5, 1, 12, 30, 0)
-        entry = Entry(self.db, None, self.project_id,
-                      entry_type=EntryType.URLAUB, is_active=False,
-                      created_at=begin, entry_date=begin.date(),
-                      begin_at=begin, end_at=end, notes="Notiz")
+        entry = Entry(
+            self.db,
+            None,
+            self.project_id,
+            entry_type=EntryType.URLAUB,
+            is_active=False,
+            created_at=begin,
+            entry_date=begin.date(),
+            begin_at=begin,
+            end_at=end,
+            notes="Notiz",
+        )
         self.assertEqual(entry.entry_type, EntryType.URLAUB)
         self.assertEqual(entry.begin_at, begin)
         self.assertEqual(entry.end_at, end)
@@ -60,13 +69,17 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(entry.notes, "Notiz")
 
     def test_load_existing_entry_lazily(self):
-        created = Entry(self.db, None, self.project_id,
-                        entry_type=EntryType.KRANKHEIT,
-                        created_at=datetime(2024, 3, 1, 9, 0, 0),
-                        entry_date=date(2024, 3, 1),
-                        begin_at=datetime(2024, 3, 1, 9, 0, 0),
-                        end_at=datetime(2024, 3, 1, 17, 0, 0),
-                        notes="Krank")
+        created = Entry(
+            self.db,
+            None,
+            self.project_id,
+            entry_type=EntryType.KRANKHEIT,
+            created_at=datetime(2024, 3, 1, 9, 0, 0),
+            entry_date=date(2024, 3, 1),
+            begin_at=datetime(2024, 3, 1, 9, 0, 0),
+            end_at=datetime(2024, 3, 1, 17, 0, 0),
+            notes="Krank",
+        )
         loaded = Entry(self.db, created.id)
         self.assertEqual(loaded.project_id, self.project_id)
         self.assertEqual(loaded.entry_type, EntryType.KRANKHEIT)
@@ -149,9 +162,13 @@ class TestEntry(unittest.TestCase):
             entry.notes = 42
 
     def test_calculate_duration_with_end(self):
-        entry = Entry(self.db, None, self.project_id,
-                      begin_at=datetime(2024, 1, 1, 8, 0, 0),
-                      end_at=datetime(2024, 1, 1, 12, 0, 0))
+        entry = Entry(
+            self.db,
+            None,
+            self.project_id,
+            begin_at=datetime(2024, 1, 1, 8, 0, 0),
+            end_at=datetime(2024, 1, 1, 12, 0, 0),
+        )
         self.assertEqual(entry.calculate_duration(entry.end_at), timedelta(hours=4))
 
     def test_calculate_duration_uses_now_when_open(self):
@@ -163,15 +180,23 @@ class TestEntry(unittest.TestCase):
         self.assertLess(duration, timedelta(minutes=11))
 
     def test_duration_with_end_at(self):
-        entry = Entry(self.db, None, self.project_id,
-                      begin_at=datetime(2024, 1, 1, 8, 0, 0),
-                      end_at=datetime(2024, 1, 1, 16, 30, 0))
+        entry = Entry(
+            self.db,
+            None,
+            self.project_id,
+            begin_at=datetime(2024, 1, 1, 8, 0, 0),
+            end_at=datetime(2024, 1, 1, 16, 30, 0),
+        )
         self.assertEqual(entry.duration, timedelta(hours=8, minutes=30))
 
     def test_duration_is_stable_when_ended(self):
-        entry = Entry(self.db, None, self.project_id,
-                      begin_at=datetime(2024, 1, 1, 8, 0, 0),
-                      end_at=datetime(2024, 1, 1, 9, 0, 0))
+        entry = Entry(
+            self.db,
+            None,
+            self.project_id,
+            begin_at=datetime(2024, 1, 1, 8, 0, 0),
+            end_at=datetime(2024, 1, 1, 9, 0, 0),
+        )
         self.assertEqual(entry.duration, entry.duration)
 
     def test_duration_open_entry_grows_with_time(self):
@@ -183,17 +208,25 @@ class TestEntry(unittest.TestCase):
 
     def test_duration_recomputed_after_end_at_change(self):
         """Changing end_at must invalidate the cached duration."""
-        entry = Entry(self.db, None, self.project_id,
-                      begin_at=datetime(2024, 1, 1, 8, 0, 0),
-                      end_at=datetime(2024, 1, 1, 9, 0, 0))
+        entry = Entry(
+            self.db,
+            None,
+            self.project_id,
+            begin_at=datetime(2024, 1, 1, 8, 0, 0),
+            end_at=datetime(2024, 1, 1, 9, 0, 0),
+        )
         entry.end_at = datetime(2024, 1, 1, 10, 0, 0)
         self.assertEqual(entry.duration, timedelta(hours=2))
 
     def test_duration_recomputed_after_begin_at_change(self):
         """Changing begin_at must invalidate the cached duration."""
-        entry = Entry(self.db, None, self.project_id,
-                      begin_at=datetime(2024, 1, 1, 8, 0, 0),
-                      end_at=datetime(2024, 1, 1, 9, 0, 0))
+        entry = Entry(
+            self.db,
+            None,
+            self.project_id,
+            begin_at=datetime(2024, 1, 1, 8, 0, 0),
+            end_at=datetime(2024, 1, 1, 9, 0, 0),
+        )
         entry.begin_at = datetime(2024, 1, 1, 7, 0, 0)
         entry.end_at = datetime(2024, 1, 1, 9, 0, 0)
         self.assertEqual(entry.duration, timedelta(hours=2))
@@ -201,6 +234,7 @@ class TestEntry(unittest.TestCase):
     def test_is_active_persisted_and_unique(self):
         """is_active must persist and stay unique across the database."""
         from sqlite3 import IntegrityError
+
         entry = Entry(self.db, None, self.project_id, is_active=True)
         self.assertTrue(Entry(self.db, entry.id).is_active)
         with self.assertRaises(IntegrityError):

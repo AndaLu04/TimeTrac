@@ -2,7 +2,8 @@ import unittest
 from datetime import date, datetime, timedelta
 
 from constants import ALLOWED_COLUMNS, DATABASE, EntryType, HourType, Tables
-from data.database import Database, database_cursor, init_sqlite_converters_and_adapters
+from data.database import (Database, database_cursor,
+                           init_sqlite_converters_and_adapters)
 
 
 class TestConstants(unittest.TestCase):
@@ -28,12 +29,34 @@ class TestConstants(unittest.TestCase):
     def test_allowed_columns_cover_schema(self):
         self.assertEqual(
             ALLOWED_COLUMNS[Tables.projects],
-            {"name", "target_hours", "hour_type", "is_default"},
+            {
+                "name",
+                "target_hours",
+                "hour_type",
+                "is_default",
+                "workdays",
+                "daily_hours_override",
+                "is_active",
+                "notes",
+            },
         )
         self.assertEqual(
             ALLOWED_COLUMNS[Tables.entries],
-            {"project_id", "entry_type", "is_active", "created_at", "edited_at",
-             "entry_date", "begin_at", "end_at", "notes"},
+            {
+                "project_id",
+                "entry_type",
+                "is_active",
+                "created_at",
+                "edited_at",
+                "entry_date",
+                "begin_at",
+                "end_at",
+                "notes",
+                "break_minutes",
+                "project_label",
+                "counts_as_work",
+                "deleted_at",
+            },
         )
 
 
@@ -46,6 +69,7 @@ class TestDatabaseBasics(unittest.TestCase):
     def setUp(self):
         import os
         import tempfile
+
         self._tmp = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self._tmp.name, "test.db")
         self.db = Database(database_path=self.db_path)
@@ -53,11 +77,21 @@ class TestDatabaseBasics(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _insert_project(self, db, name="Projekt", target_hours=20.0,
-                        hour_type=HourType.WEEKLY, is_default=False):
+    def _insert_project(
+        self,
+        db,
+        name="Projekt",
+        target_hours=20.0,
+        hour_type=HourType.WEEKLY,
+        is_default=False,
+    ):
         return db.insert_new_row(
-            content={"name": name, "target_hours": target_hours,
-                     "hour_type": hour_type, "is_default": is_default},
+            content={
+                "name": name,
+                "target_hours": target_hours,
+                "hour_type": hour_type,
+                "is_default": is_default,
+            },
             table=Tables.projects,
         )
 
@@ -90,7 +124,9 @@ class TestDatabaseBasics(unittest.TestCase):
         row_id = self._insert_project(self.db, name="Gottesdienst")
         self.assertEqual(self.db.get(Tables.projects, row_id, "name"), "Gottesdienst")
         self.assertEqual(self.db.get(Tables.projects, row_id, "target_hours"), 20.0)
-        self.assertEqual(self.db.get(Tables.projects, row_id, "hour_type"), HourType.WEEKLY)
+        self.assertEqual(
+            self.db.get(Tables.projects, row_id, "hour_type"), HourType.WEEKLY
+        )
 
     def test_insert_returns_increasing_ids(self):
         first = self._insert_project(self.db, name="A")
@@ -128,19 +164,23 @@ class TestDatabaseBasics(unittest.TestCase):
         entry_a1 = self._insert_entry(self.db, project_a)
         entry_a2 = self._insert_entry(self.db, project_a)
         entry_b1 = self._insert_entry(self.db, project_b)
-        self.assertEqual(self.db.get_entry_ids_from_project_id(project_a), [entry_a1, entry_a2])
+        self.assertEqual(
+            self.db.get_entry_ids_from_project_id(project_a), [entry_a1, entry_a2]
+        )
         self.assertEqual(self.db.get_entry_ids_from_project_id(project_b), [entry_b1])
         self.assertEqual(self.db.get_entry_ids_from_project_id(999), [])
 
     def test_foreign_key_enforced(self):
         """Entries referencing a non-existent project must be rejected."""
         from sqlite3 import IntegrityError
+
         with self.assertRaises(IntegrityError):
             self._insert_entry(self.db, project_id=999)
 
     def test_only_one_active_entry_allowed(self):
         """The partial unique index must allow only one active entry."""
         from sqlite3 import IntegrityError
+
         project = self._insert_project(self.db)
         self._insert_entry(self.db, project, is_active=True)
         with self.assertRaises(IntegrityError):
@@ -156,19 +196,26 @@ class TestDatabaseBasics(unittest.TestCase):
         """Registered adapters/converters must preserve Python types."""
         project = self._insert_project(self.db)
         entry_id = self._insert_entry(self.db, project)
-        self.assertEqual(self.db.get(Tables.entries, entry_id, "created_at"),
-                         datetime(2024, 1, 1, 8, 0, 0))
-        self.assertEqual(self.db.get(Tables.entries, entry_id, "entry_date"),
-                         date(2024, 1, 1))
-        self.assertEqual(self.db.get(Tables.entries, entry_id, "entry_type"),
-                         EntryType.ARBEIT)
+        self.assertEqual(
+            self.db.get(Tables.entries, entry_id, "created_at"),
+            datetime(2024, 1, 1, 8, 0, 0),
+        )
+        self.assertEqual(
+            self.db.get(Tables.entries, entry_id, "entry_date"), date(2024, 1, 1)
+        )
+        self.assertEqual(
+            self.db.get(Tables.entries, entry_id, "entry_type"), EntryType.ARBEIT
+        )
 
     def test_edited_at_roundtrip(self):
         project = self._insert_project(self.db)
-        entry_id = self._insert_entry(self.db, project,
-                                       edited_at=datetime(2024, 1, 2, 9, 30, 0))
-        self.assertEqual(self.db.get(Tables.entries, entry_id, "edited_at"),
-                         datetime(2024, 1, 2, 9, 30, 0))
+        entry_id = self._insert_entry(
+            self.db, project, edited_at=datetime(2024, 1, 2, 9, 30, 0)
+        )
+        self.assertEqual(
+            self.db.get(Tables.entries, entry_id, "edited_at"),
+            datetime(2024, 1, 2, 9, 30, 0),
+        )
 
     def test_init_converters_idempotent(self):
         """Repeated converter registration must not break type handling."""
@@ -176,8 +223,9 @@ class TestDatabaseBasics(unittest.TestCase):
         init_sqlite_converters_and_adapters()
         project = self._insert_project(self.db)
         entry_id = self._insert_entry(self.db, project)
-        self.assertEqual(self.db.get(Tables.entries, entry_id, "entry_type"),
-                         EntryType.ARBEIT)
+        self.assertEqual(
+            self.db.get(Tables.entries, entry_id, "entry_type"), EntryType.ARBEIT
+        )
 
     def test_database_reopened_keeps_data(self):
         """Reopening the database file must not lose persisted data."""
@@ -189,7 +237,9 @@ class TestDatabaseBasics(unittest.TestCase):
         project = self._insert_project(self.db)
         entry_id = self._insert_entry(self.db, project)
         with database_cursor(self.db_path) as cursor:
-            cursor.execute("SELECT begin_at, end_at FROM entries WHERE id=?", (entry_id,))
+            cursor.execute(
+                "SELECT begin_at, end_at FROM entries WHERE id=?", (entry_id,)
+            )
             begin_at, end_at = cursor.fetchone()
         self.assertEqual(end_at - begin_at, timedelta(hours=4))
 

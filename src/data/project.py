@@ -237,7 +237,7 @@ class Project:
             )
 
     @property
-    def workdays(self) -> set[int]:
+    def workdays(self) -> list[int]:
         """
         Get the configured working days (ISO weekdays, Monday=0 ... Sunday=6).
 
@@ -245,21 +245,21 @@ class Project:
         """
         if self._workdays is None:
             raw = self.db.get(self.table, self.id, "workdays")
-            self._workdays = set(loads(raw))
-        return set(self._workdays)
+            self._workdays = list(loads(raw))
+        return self._workdays
 
     @workdays.setter
-    def workdays(self, value: set[int] | list[int]) -> None:
+    def workdays(self, value: list[int]) -> None:
         """Set the working days (persists automatically as JSON list)."""
-        days = set(value)
+        days = value
         if not days:
             raise TypeError("'workdays' must not be empty")
         if any(
-            isinstance(day, bool) or not isinstance(day, int) or day < 0 or day > 6
+            isinstance(day, bool) or not isinstance(day, int) or not 0 <= day <= 6
             for day in days
         ):
             raise TypeError(
-                f"'workdays' must contain ISO weekdays 0-6, but is {value!r}"
+                f"'workdays' must contain ISO weekdays 0-6, but is {value.__class__.__name__}"
             )
         self._workdays = days
         if not self._init:
@@ -288,19 +288,19 @@ class Project:
             )
         normalized = {}
         for key, hours in value.items():
-            if isinstance(key, bool):
+            if isinstance(key, bool) or not isinstance(key, int) or not 0 <= key <= 6:
                 raise TypeError(
-                    f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value!r}"
+                    f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 )
             try:
                 weekday = int(key)
             except (TypeError, ValueError) as error:
                 raise TypeError(
-                    f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value!r}"
+                    f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 ) from error
             if weekday < 0 or weekday > 6:
                 raise TypeError(
-                    f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value!r}"
+                    f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 )
             normalized[weekday] = hours
         self._daily_hours_override = normalized

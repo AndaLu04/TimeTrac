@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Literal
 
-from data.database import Database, database_cursor
+from data.database import Database
 from data.entry import Entry
 from data.project import Project
 from logic.overtime_service import OvertimeService
@@ -72,12 +72,4 @@ class AnalysisService:
         return self.summary_for_range(project, "total", start, date.today())
 
     def _first_entry_date(self, project: Project) -> date:
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute(
-                "SELECT MIN(entry_date) FROM entries WHERE project_id = ? AND deleted_at IS NULL",
-                (project.id,),
-            )
-            row = cursor.fetchone()
-        if not row or row[0] is None:
-            return date.today()
-        return row[0] if isinstance(row[0], date) else date.fromisoformat(str(row[0]))
+        return self.db.get_first_entry_date(project.id) or date.today()

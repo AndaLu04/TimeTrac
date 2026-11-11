@@ -3,7 +3,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 
 from constants import HourType
-from data.database import Database, database_cursor
+from data.database import Database
 from data.project import Project
 
 DEFAULT_WORKDAYS = {0, 1, 2, 3, 4}
@@ -157,13 +157,7 @@ class AllTimeModel(AbstractWorkingTimeModel):
     def anchor_date(self) -> date:
         """Frühestes entry_date des Projekts als Verteilungsbeginn."""
         if self._anchor is None:
-            with database_cursor(self.db.database_path) as cursor:
-                cursor.execute(
-                    "SELECT MIN(entry_date) FROM entries WHERE project_id = ? AND deleted_at IS NULL",
-                    (self.project.id,),
-                )
-                row = cursor.fetchone()
-            self._anchor = row[0] if row and row[0] else date.today()
+            self._anchor = self.db.get_first_entry_date(self.project.id) or date.today()
         return self._anchor
 
     def _total_workdays(self) -> int:

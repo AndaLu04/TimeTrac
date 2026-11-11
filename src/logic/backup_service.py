@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copyfile
 
-from data.database import Database, database_cursor
+from data.database import Database
 from logic.settings_service import SettingsService
 
 
@@ -45,11 +45,4 @@ class BackupService:
         copyfile(source, self.db.database_path)
 
     def _is_valid_database(self, path) -> bool:
-        try:
-            with database_cursor(path) as cursor:
-                cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='entries'"
-                )
-                return cursor.fetchone() is not None
-        except Exception:
-            return False
+        return Database.is_valid_database(path)

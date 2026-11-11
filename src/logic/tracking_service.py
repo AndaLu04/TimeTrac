@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from constants import EntryType
-from data.database import Database, database_cursor
+from data.database import Database
 from data.entry import Entry
 from data.project import Project
 
@@ -26,12 +26,8 @@ class TrackingService:
 
     def get_active_entry(self) -> Entry | None:
         """Liefert den einzigen aktiven Eintrag oder None."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute(
-                "SELECT id FROM entries WHERE is_active = 1 AND deleted_at IS NULL"
-            )
-            row = cursor.fetchone()
-        return Entry(self.db, row[0]) if row else None
+        entry_id = self.db.get_active_entry_id()
+        return Entry(self.db, entry_id) if entry_id is not None else None
 
     def clock_in(
         self, project: Project, entry_type: EntryType = EntryType.ARBEIT

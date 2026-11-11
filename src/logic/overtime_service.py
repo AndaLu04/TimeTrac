@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from constants import EntryType
-from data.database import Database, database_cursor
+from data.database import Database
 from data.entry import Entry
 from data.project import Project
 from logic.working_time_model import get_working_time_model
@@ -22,13 +22,10 @@ class OvertimeService:
 
     def entries_between(self, project: Project, start: date, end: date) -> list[Entry]:
         """Nicht gelöschte Einträge eines Projekts im Zeitraum (nach entry_date)."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute(
-                "SELECT id FROM entries "
-                "WHERE project_id = ? AND deleted_at IS NULL AND entry_date BETWEEN ? AND ?",
-                (project.id, start, end),
-            )
-            return [Entry(self.db, row[0]) for row in cursor.fetchall()]
+        return [
+            Entry(self.db, entry_id)
+            for entry_id in self.db.get_entry_ids_between_dates(project.id, start, end)
+        ]
 
     def _absence_dates(self, entries: list[Entry]) -> set[date]:
         return {
@@ -89,15 +86,7 @@ class OvertimeService:
 
     def overtime_total(self, project: Project) -> float:
         """Kumulierte Überstunden seit dem frühesten Eintrag (ohne Verfall)."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute(
-                "SELECT MIN(entry_date) FROM entries WHERE project_id = ? AND deleted_at IS NULL",
-                (project.id,),
-            )
-            row = cursor.fetchone()
-        if not row or row[0] is None:
+        first_day = self.db.get_first_entry_date(project.id)
+        if first_day is None:
             return 0.0
-        first_day = (
-            row[0] if isinstance(row[0], date) else date.fromisoformat(str(row[0]))
-        )
         return self.overtime(project, first_day, date.today())

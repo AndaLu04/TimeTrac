@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import Path
 
 from constants import EntryType
-from data.database import Database, database_cursor
+from data.database import Database
 from data.entry import Entry
 from data.project import Project
 
@@ -72,10 +72,4 @@ class HolidayImportService:
         return events
 
     def _holiday_entry_exists(self, project: Project, day: date) -> bool:
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute(
-                "SELECT id FROM entries "
-                "WHERE project_id = ? AND entry_type = 'Feiertag' AND entry_date = ? AND deleted_at IS NULL",
-                (project.id, day),
-            )
-            return cursor.fetchone() is not None
+        return self.db.entry_exists(project.id, EntryType.FEIERTAG, day)

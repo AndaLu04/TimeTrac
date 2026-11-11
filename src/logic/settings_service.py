@@ -17,7 +17,7 @@ class SettingsService:
     """Typisierter Zugriff auf gerätelokale Einstellungen (ARCHITECTURE.md 3.5)."""
 
     def __init__(self, db: Database):
-        self.repository = SettingsRepository(db.database_path)
+        self.repository = SettingsRepository(db)
 
     def get_raw(self, key: str) -> str | None:
         """Liest einen Rohwert mit Fallback auf den konfigurierten Default."""

@@ -62,7 +62,7 @@ class TestSettingsRepository(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self._tmp.name, "test.db")
         self.db = Database(database_path=self.db_path)
-        self.repo = SettingsRepository(database_path=self.db_path)
+        self.repo = SettingsRepository(self.db)
 
     def tearDown(self):
         self._tmp.cleanup()

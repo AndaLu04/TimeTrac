@@ -56,10 +56,10 @@ class TestWeeklyModel(ModelTestBase):
         self.assertEqual(model.target_hours_for_week(2026, 48), 40.0)
 
     def test_total_since(self):
+        """Erwartungswert hängt vom heutigen Wochentag ab (Wochenende = 0)."""
         model = WeeklyModel(self.make_project(HourType.WEEKLY, 40))
-        self.assertEqual(
-            model.target_hours_total(date.today()), 8.0
-        )  # heute ist ein Arbeitstag
+        expected = 8.0 if date.today().weekday() < 5 else 0.0
+        self.assertEqual(model.target_hours_total(date.today()), expected)
 
 
 class TestDailyModel(ModelTestBase):

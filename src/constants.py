@@ -1,9 +1,10 @@
+from enum import Enum, StrEnum
 from pathlib import Path
-from enum import StrEnum, Enum
 
 PROJECT_ROOT = Path(__file__).parent.parent
 PROJECT_SRC = PROJECT_ROOT / "src"
 DATABASE = PROJECT_ROOT / "data" / "database.db"
+
 
 class EntryType(StrEnum):
     ARBEIT = "Arbeit"
@@ -15,11 +16,13 @@ class EntryType(StrEnum):
     SONSTIGES = "Sonstiges"
     PLATZHALTER = "Platzhalter"
 
+
 class HourType(StrEnum):
     ALLTIME = "Alltime"
     MONTHLY = "Monthly"
     WEEKLY = "Weekly"
     DAILY = "Daily"
+
 
 class Tables(Enum):
     projects = "projects"
@@ -27,12 +30,34 @@ class Tables(Enum):
     settings = "settings"
 
 
+HALF_DAY_MARKER = "halber Tag"
+
 ALLOWED_COLUMNS = {
-    Tables.projects: {"name", "target_hours", "hour_type", "is_default", "workdays",
-                     "daily_hours_override", "is_active", "notes"},
-    Tables.entries: {"project_id", "entry_type", "is_active", "created_at", "edited_at",
-                     "entry_date", "begin_at", "end_at", "notes", "break_minutes",
-                     "project_label", "counts_as_work", "deleted_at"},
+    Tables.projects: {
+        "name",
+        "target_hours",
+        "hour_type",
+        "is_default",
+        "workdays",
+        "daily_hours_override",
+        "is_active",
+        "notes",
+    },
+    Tables.entries: {
+        "project_id",
+        "entry_type",
+        "is_active",
+        "created_at",
+        "edited_at",
+        "entry_date",
+        "begin_at",
+        "end_at",
+        "notes",
+        "break_minutes",
+        "project_label",
+        "counts_as_work",
+        "deleted_at",
+    },
     Tables.settings: {"key", "value"},
 }
 

@@ -56,15 +56,22 @@ class TrackingService:
         """
         Stempelt aus: beendet den aktiven Eintrag mit der aktuellen Zeit.
 
+        is_active wird zuerst persistiert, damit ein Absturz dazwischen nie
+        einen aktiven Eintrag mit end_at hinterlässt.
+
         Raises:
-            TrackingError: wenn der Eintrag nicht aktiv ist.
+            TrackingError: wenn der Eintrag soft-deleted oder nicht aktiv ist.
         """
+        if entry.deleted_at is not None:
+            raise TrackingError(
+                "Ein gelöschter Eintrag kann nicht ausgestempelt werden"
+            )
         if not entry.is_active:
             raise TrackingError("Nur ein aktiver Eintrag kann ausgestempelt werden")
         now = datetime.now()
+        entry.is_active = False
         entry.end_at = now
         entry.edited_at = now
-        entry.is_active = False
         return entry
 
     def update_times(

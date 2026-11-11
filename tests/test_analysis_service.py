@@ -90,6 +90,8 @@ class TestAnalysisService(unittest.TestCase):
         self.assertAlmostEqual(summary_2027.actual_hours, 8.0)
 
     def test_dto_is_frozen(self):
+        from dataclasses import FrozenInstanceError
+
         summary = self.service.week_summary(self.project, date(2026, 11, 16))
-        with self.assertRaises(Exception):
+        with self.assertRaises(FrozenInstanceError):
             summary.actual_hours = 1.0

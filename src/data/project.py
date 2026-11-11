@@ -251,14 +251,19 @@ class Project:
     @workdays.setter
     def workdays(self, value: set[int] | list[int]) -> None:
         """Set the working days (persists automatically as JSON list)."""
-        days = sorted(value)
-        if any(not isinstance(day, int) or day < 0 or day > 6 for day in days):
+        days = set(value)
+        if not days:
+            raise TypeError("'workdays' must not be empty")
+        if any(
+            isinstance(day, bool) or not isinstance(day, int) or day < 0 or day > 6
+            for day in days
+        ):
             raise TypeError(
                 f"'workdays' must contain ISO weekdays 0-6, but is {value!r}"
             )
         self._workdays = days
         if not self._init:
-            self.db.set(self.table, self.id, "workdays", dumps(days))
+            self.db.set(self.table, self.id, "workdays", dumps(sorted(days)))
 
     @property
     def daily_hours_override(self) -> dict[int, float]:

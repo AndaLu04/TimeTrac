@@ -200,6 +200,22 @@ class TestExtendedColumns(unittest.TestCase):
         with self.assertRaises(TypeError):
             project.workdays = {9}
 
+    def test_workdays_rejects_empty_collection(self):
+        project = Project(self.db, None, "Test", 40)
+        with self.assertRaises(TypeError):
+            project.workdays = set()
+
+    def test_workdays_rejects_bool_values(self):
+        project = Project(self.db, None, "Test", 40)
+        with self.assertRaises(TypeError):
+            project.workdays = {True, 2}
+
+    def test_workdays_cache_is_a_set(self):
+        project = Project(self.db, None, "Test", 40)
+        project.workdays = [1, 2, 3]
+        self.assertIsInstance(project._workdays, set)
+        self.assertEqual(project.workdays, {1, 2, 3})
+
     def test_new_entry_types_exist(self):
         self.assertEqual(EntryType.ELTERNZEIT, "Elternzeit")
         self.assertEqual(EntryType.UEBERSTUNDENAUSGLEICH, "Überstundenausgleich")

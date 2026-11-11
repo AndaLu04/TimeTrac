@@ -1,9 +1,8 @@
-from time import sleep
+from datetime import date, datetime, timedelta
 from typing import Optional
 
-from data.database import Database, Tables
 from constants import EntryType
-from datetime import datetime, date, timedelta
+from data.database import Database, Tables
 
 
 class Entry:
@@ -20,11 +19,20 @@ class Entry:
         table: The database table (Tables.entries) where entries are stored.
     """
 
-    def __init__( self,  db: Database, entry_id: int | None = None, project_id: int = None,
-                  entry_type: EntryType = EntryType.ARBEIT, is_active: bool = False,
-                  created_at: datetime = None, edited_at: datetime | None = None,
-                  entry_date: date = None, begin_at: datetime = None,
-                  end_at: datetime | None = None, notes: str | None = None):
+    def __init__(
+        self,
+        db: Database,
+        entry_id: int | None = None,
+        project_id: int = None,
+        entry_type: EntryType = EntryType.ARBEIT,
+        is_active: bool = False,
+        created_at: datetime = None,
+        edited_at: datetime | None = None,
+        entry_date: date = None,
+        begin_at: datetime = None,
+        end_at: datetime | None = None,
+        notes: str | None = None,
+    ):
         """
         Initialize a new or existing Entry.
 
@@ -49,8 +57,8 @@ class Entry:
 
         self._project_id: Optional[int] = None
         self._entry_type: Optional[EntryType] = None
-        self._is_active: Optional[bool]= None
-        self._created_at: Optional[datetime]= None
+        self._is_active: Optional[bool] = None
+        self._created_at: Optional[datetime] = None
         self._edited_at: Optional[datetime] = None
         self._entry_date: Optional[date] = None
         self._begin_at: Optional[datetime] = None
@@ -77,7 +85,8 @@ class Entry:
             if begin_at is None:
                 begin_at = datetime.now()
 
-            self._init = True #activate init behavior: setters don't persist to db to create the db row after initializing all internal variables
+            # Init-Modus: Setter persistieren nicht, die Zeile wird erst danach angelegt
+            self._init = True
             self.project_id = project_id
             self.entry_type = entry_type
             self.is_active = is_active
@@ -89,10 +98,18 @@ class Entry:
             self.notes = notes
             self._init = False
             self.id = self.db.insert_new_row(
-                content={"project_id": self._project_id,"entry_type": self._entry_type,"is_active": self._is_active,
-                         "created_at": self._created_at,"edited_at": self._edited_at,"entry_date": self._entry_date,
-                         "begin_at": self._begin_at,"end_at": self._end_at,"notes": self._notes,},
-                table=self.table
+                content={
+                    "project_id": self._project_id,
+                    "entry_type": self._entry_type,
+                    "is_active": self._is_active,
+                    "created_at": self._created_at,
+                    "edited_at": self._edited_at,
+                    "entry_date": self._entry_date,
+                    "begin_at": self._begin_at,
+                    "end_at": self._end_at,
+                    "notes": self._notes,
+                },
+                table=self.table,
             )
 
     @property
@@ -124,7 +141,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "project_id", value)
         else:
-            raise TypeError(f"'project_id' must be an integer but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'project_id' must be an integer but is {value.__class__.__name__}"
+            )
 
     @property
     def entry_type(self) -> EntryType:
@@ -155,7 +174,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "entry_type", value)
         else:
-            raise TypeError(f"'entry_type' must be an EntryType enum but is of type {value.__class__.__name__}")
+            raise TypeError(
+                f"'entry_type' must be an EntryType enum but is of type {value.__class__.__name__}"
+            )
 
     @property
     def is_active(self) -> bool:
@@ -186,7 +207,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "is_active", value)
         else:
-            raise TypeError(f"'is_active' must be True or False, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'is_active' must be True or False, but is {value.__class__.__name__}"
+            )
 
     @property
     def created_at(self) -> datetime:
@@ -217,7 +240,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "created_at", value)
         else:
-            raise TypeError(f"'created_at' must be datetime but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'created_at' must be datetime but is {value.__class__.__name__}"
+            )
 
     @property
     def edited_at(self) -> datetime | None:
@@ -248,7 +273,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "edited_at", value)
         else:
-            raise TypeError(f"'edited_at' must be datetime or None, but is {value.__class__.__name__}'")
+            raise TypeError(
+                f"'edited_at' must be datetime or None, but is {value.__class__.__name__}'"
+            )
 
     @property
     def entry_date(self) -> date | None:
@@ -279,7 +306,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "entry_date", value)
         else:
-            raise TypeError(f"'entry_date' must be date, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'entry_date' must be date, but is {value.__class__.__name__}"
+            )
 
     @property
     def begin_at(self) -> datetime:
@@ -311,7 +340,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "begin_at", value)
         else:
-            raise TypeError(f"'begin_at' must be datetime, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'begin_at' must be datetime, but is {value.__class__.__name__}"
+            )
 
     @property
     def end_at(self) -> datetime | None:
@@ -346,7 +377,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "end_at", value)
         else:
-            raise TypeError(f"'end_at' must be datetime or None, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'end_at' must be datetime or None, but is {value.__class__.__name__}"
+            )
 
     @property
     def notes(self) -> str | None:
@@ -399,7 +432,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "break_minutes", value)
         else:
-            raise TypeError(f"'break_minutes' must be a non-negative integer, but is {value!r}")
+            raise TypeError(
+                f"'break_minutes' must be a non-negative integer, but is {value!r}"
+            )
 
     @property
     def project_label(self) -> str | None:
@@ -416,7 +451,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "project_label", value)
         else:
-            raise TypeError(f"'project_label' must be str or None, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'project_label' must be str or None, but is {value.__class__.__name__}"
+            )
 
     @property
     def counts_as_work(self) -> bool | None:
@@ -439,7 +476,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "counts_as_work", value)
         else:
-            raise TypeError(f"'counts_as_work' must be bool or None, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'counts_as_work' must be bool or None, but is {value.__class__.__name__}"
+            )
 
     @property
     def deleted_at(self) -> datetime | None:
@@ -458,7 +497,9 @@ class Entry:
             if not self._init:
                 self.db.set(Tables.entries, self.id, "deleted_at", value)
         else:
-            raise TypeError(f"'deleted_at' must be datetime or None, but is {value.__class__.__name__}")
+            raise TypeError(
+                f"'deleted_at' must be datetime or None, but is {value.__class__.__name__}"
+            )
 
     @property
     def duration(self) -> timedelta:
@@ -479,26 +520,37 @@ class Entry:
             return self._duration
 
     def calculate_duration(self, end_or_current_time: datetime = None) -> timedelta:
+        """Berechnet die Dauer ab begin_at bis zu einem Endzeitpunkt (Default: jetzt)."""
         if end_or_current_time is None:
             end_or_current_time = datetime.now()
         return end_or_current_time - self.begin_at
+
 
 if __name__ == "__main__":
     database = Database()
     entry = Entry(database, None, 3, is_active=True)
     print(
-        "id:            ", entry.id,
-        "\nproject_id:  ", entry.project_id,
-        "\nentry_type:  ", entry.entry_type,
-        "\ncreated_at:  ", entry.created_at,
-        "\nentry_date:  ", entry.entry_date,
-        "\nbegin_at:    ", entry.begin_at,
-        "\nend_at:      ", entry.end_at,
-        "\nnotes:       ", entry.notes,
-        "\nduration:    ", entry.duration,
+        "id:            ",
+        entry.id,
+        "\nproject_id:  ",
+        entry.project_id,
+        "\nentry_type:  ",
+        entry.entry_type,
+        "\ncreated_at:  ",
+        entry.created_at,
+        "\nentry_date:  ",
+        entry.entry_date,
+        "\nbegin_at:    ",
+        entry.begin_at,
+        "\nend_at:      ",
+        entry.end_at,
+        "\nnotes:       ",
+        entry.notes,
+        "\nduration:    ",
+        entry.duration,
     )
     print(entry.entry_type.__class__.__name__)
 
-    #for i in range(10):
+    # for i in range(10):
     #    sleep(1)
     #    print(entry.duration)

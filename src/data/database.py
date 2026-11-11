@@ -1,3 +1,4 @@
+import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
 from itertools import repeat
@@ -54,9 +55,11 @@ def init_sqlite_converters_and_adapters():
         return val.isoformat()
 
     def adapt_entry_type(val: EntryType) -> str:
+        """Serialisiert EntryType nach TEXT."""
         return val.value
 
     def adapt_hour_type(val: HourType) -> str:
+        """Serialisiert HourType nach TEXT."""
         return val.value
 
     def convert_date(val):
@@ -68,10 +71,12 @@ def init_sqlite_converters_and_adapters():
         return datetime.fromisoformat(val.decode())
 
     def convert_entry_type(val):
+        """Deserialisiert TEXT nach EntryType."""
         str_value = val.decode() if isinstance(val, bytes) else val
         return EntryType(str_value)
 
     def convert_hour_type(val):
+        """Deserialisiert TEXT nach HourType."""
         str_value = val.decode() if isinstance(val, bytes) else val
         return HourType(str_value)
 
@@ -173,6 +178,7 @@ class Database:
             return cursor.fetchone()[0]
 
     def get_all_project_ids(self) -> list:
+        """Listet die IDs aller Projekte auf."""
         statement = "SELECT id from projects"
         with database_cursor(self.database_path) as cursor:
             cursor.execute(statement)
@@ -270,7 +276,7 @@ class Database:
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='entries'"
                 )
                 return cursor.fetchone() is not None
-        except Exception:
+        except (sqlite3.Error, OSError):
             return False
 
     def get_entry_ids_from_project_id(self, project_id: int) -> list[int]:

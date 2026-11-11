@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from constants import EntryType
+from constants import HALF_DAY_MARKER, EntryType
 from data.database import Database
 from data.entry import Entry
 from data.project import Project
@@ -27,12 +27,22 @@ class OvertimeService:
             for entry_id in self.db.get_entry_ids_between_dates(project.id, start, end)
         ]
 
-    def _absence_dates(self, entries: list[Entry]) -> set[date]:
-        return {
-            entry.entry_date
-            for entry in entries
-            if entry.entry_type in ABSENCE_FULFILLS_TARGET
-        }
+    def _absence_dates(self, entries: list[Entry]) -> dict[date, float]:
+        """
+        Abwesenheitstage mit verbleibendem Sollanteil.
+
+        Ganzer Tag: 0.0 (Soll gilt als erfüllt/erlassen), halber Tag
+        (Notes-Marker HALF_DAY_MARKER): 0.5 (halbes Soll bleibt bestehen).
+        """
+        weights: dict[date, float] = {}
+        for entry in entries:
+            if entry.entry_type not in ABSENCE_FULFILLS_TARGET:
+                continue
+            if entry.notes and entry.notes.startswith(HALF_DAY_MARKER):
+                weights[entry.entry_date] = min(weights.get(entry.entry_date, 1.0), 0.5)
+            else:
+                weights[entry.entry_date] = 0.0
+        return weights
 
     def actual_hours(self, project: Project, start: date, end: date) -> float:
         """
@@ -54,12 +64,15 @@ class OvertimeService:
         (Urlaub/Krankheit/Feiertag) gelten als erfülltes Soll.
         """
         model = get_working_time_model(project, self.db)
-        absence_dates = self._absence_dates(self.entries_between(project, start, end))
+        absence_weights = self._absence_dates(self.entries_between(project, start, end))
         total = 0.0
         current = start
         while current <= end:
-            if current not in absence_dates and current.weekday() in model.workdays:
-                total += model.target_hours_for_day(current)
+            day_target = model.target_hours_for_day(current)
+            if current in absence_weights:
+                total += absence_weights[current] * day_target
+            else:
+                total += day_target
             current += timedelta(days=1)
         return total
 

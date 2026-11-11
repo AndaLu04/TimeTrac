@@ -22,11 +22,11 @@ class TestExportService(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _add_entry(self, day, begin, end, notes=None, break_minutes=0):
+    def _add_entry(self, day, begin, end, notes=None, break_minutes=0, project=None):
         entry = Entry(
             self.db,
             None,
-            self.project.id,
+            (project or self.project).id,
             entry_date=day,
             begin_at=datetime.combine(day, begin),
             end_at=datetime.combine(day, end),
@@ -149,6 +149,23 @@ class TestExportService(unittest.TestCase):
         )
         csv = self.service.export_csv(self.project, day, day)
         self.assertIn("16:00", csv)
+
+    def test_all_formula_prefixes_are_neutralized(self):
+        """Notizen mit führendem =, +, -, @ werden jeweils mit ' maskiert."""
+        day = date(2026, 11, 16)
+        for index, note in enumerate(("=A()", "+B()", "-C()", "@D()")):
+            with self.subTest(note=note):
+                project = Project(self.db, None, f"P{index}", 8, HourType.DAILY)
+                self._add_entry(
+                    day,
+                    datetime.min.time().replace(hour=8),
+                    datetime.min.time().replace(hour=9),
+                    notes=note,
+                    project=project,
+                )
+                csv = self.service.export_csv(project, day, day)
+                self.assertIn(f"'{note}", csv)
+                self.assertNotIn(f",{note},", csv)
 
     def test_midnight_span_exported_on_entry_date(self):
         day = date(2026, 11, 16)

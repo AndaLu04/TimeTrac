@@ -33,6 +33,7 @@ class AnalysisService:
     def summary_for_range(
         self, project: Project, period_type: PeriodType, start: date, end: date
     ) -> PeriodSummary:
+        """Erzeugt die Zusammenfassung eines beliebigen Zeitraums."""
         actual = self.overtime_service.actual_hours(project, start, end)
         target = self.overtime_service.target_hours(project, start, end)
         entries = self.overtime_service.entries_between(project, start, end)
@@ -47,11 +48,13 @@ class AnalysisService:
         )
 
     def week_summary(self, project: Project, day: date | None = None) -> PeriodSummary:
+        """Zusammenfassung der ISO-Kalenderwoche von day (Default: heute)."""
         reference = day or date.today()
         start = reference - timedelta(days=reference.weekday())
         return self.summary_for_range(project, "week", start, start + timedelta(days=6))
 
     def month_summary(self, project: Project, day: date | None = None) -> PeriodSummary:
+        """Zusammenfassung des Kalendermonats von day (Default: heute)."""
         reference = day or date.today()
         start = date(reference.year, reference.month, 1)
         next_month = date(
@@ -62,14 +65,17 @@ class AnalysisService:
         )
 
     def year_summary(self, project: Project, day: date | None = None) -> PeriodSummary:
+        """Zusammenfassung des Kalenderjahres von day (Default: heute)."""
         reference = day or date.today()
         return self.summary_for_range(
             project, "year", date(reference.year, 1, 1), date(reference.year, 12, 31)
         )
 
     def total_summary(self, project: Project) -> PeriodSummary:
+        """Zusammenfassung seit dem frühesten Eintrag bis heute."""
         start = self._first_entry_date(project)
         return self.summary_for_range(project, "total", start, date.today())
 
     def _first_entry_date(self, project: Project) -> date:
+        """Frühestes entry_date des Projekts, sonst heute."""
         return self.db.get_first_entry_date(project.id) or date.today()

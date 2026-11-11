@@ -53,6 +53,7 @@ class ExportService:
         return buffer.getvalue()
 
     def _format_hours(self, duration, decimal_separator: str) -> str:
+        """Formatiert eine Dauer in Stunden mit konfigurierbarem Dezimaltrennzeichen."""
         hours = duration.total_seconds() / 3600
         return f"{hours:.2f}".replace(".", decimal_separator)
 

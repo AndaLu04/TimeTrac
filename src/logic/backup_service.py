@@ -64,4 +64,5 @@ class BackupService:
             staged.unlink(missing_ok=True)
 
     def _is_valid_database(self, path) -> bool:
+        """Delegiert die DB-Validierung an den Data-Layer."""
         return Database.is_valid_database(path)

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 from data.database import DATABASE, database_cursor
 
 
@@ -16,6 +15,7 @@ class SettingsRepository:
         self.database_path: Path = database_path
 
     def set(self, key: str, value: str | None) -> None:
+        """Schreibt einen Wert unter einem Schlüssel (überschreibt vorhandene)."""
         with database_cursor(self.database_path) as cursor:
             cursor.execute(
                 "INSERT INTO settings (key, value) VALUES (?, ?) "
@@ -24,16 +24,19 @@ class SettingsRepository:
             )
 
     def get(self, key: str, default: str | None = None) -> str | None:
+        """Liest einen Wert, mit Default bei fehlendem Schlüssel."""
         with database_cursor(self.database_path) as cursor:
             cursor.execute("SELECT value FROM settings WHERE key=?", (key,))
             row = cursor.fetchone()
             return default if row is None else row[0]
 
     def delete(self, key: str) -> None:
+        """Entfernt einen Schlüssel aus der Tabelle."""
         with database_cursor(self.database_path) as cursor:
             cursor.execute("DELETE FROM settings WHERE key=?", (key,))
 
     def keys(self) -> list[str]:
+        """Listet alle vorhandenen Schlüssel aufsteigend."""
         with database_cursor(self.database_path) as cursor:
             cursor.execute("SELECT key FROM settings ORDER BY key")
             return [row[0] for row in cursor.fetchall()]

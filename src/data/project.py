@@ -311,7 +311,7 @@ class Project:
             )
         normalized = {}
         for key, hours in value.items():
-            if isinstance(key, bool):
+            if isinstance(key, bool) or not isinstance(key, int) or not 0 <= key <= 6:
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 )

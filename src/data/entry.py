@@ -433,7 +433,7 @@ class Entry:
                 self.db.set(Tables.entries, self.id, "break_minutes", value)
         else:
             raise TypeError(
-                f"'break_minutes' must be a non-negative integer, but is {value!r}"
+                f"'break_minutes' must be a non-negative integer, but is {value.__class__.__name__}"
             )
 
     @property

@@ -89,6 +89,23 @@ class TestTrackingService(unittest.TestCase):
         self.assertEqual(entry.begin_at, begin)
         self.assertTrue(entry.is_active)
 
+    def test_update_times_rejects_deleted_entry(self):
+        entry = self.service.clock_in(self.project)
+        self.service.clock_out(entry)
+        self.service.delete_entry(entry)
+        begin_before = entry.begin_at
+        with self.assertRaises(TrackingError):
+            self.service.update_times(
+                entry, datetime(2026, 3, 30, 8, 0), datetime(2026, 3, 30, 16, 0)
+            )
+        self.assertEqual(entry.begin_at, begin_before)
+
+    def test_update_times_rejects_future_begin_on_active_entry(self):
+        entry = self.service.clock_in(self.project)
+        future = datetime.now() + timedelta(hours=1)
+        with self.assertRaises(TrackingError):
+            self.service.update_times(entry, future, None)
+
     def test_delete_entry_is_soft(self):
         entry = self.service.clock_in(self.project)
         self.service.clock_out(entry)

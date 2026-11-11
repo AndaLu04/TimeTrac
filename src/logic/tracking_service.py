@@ -74,9 +74,14 @@ class TrackingService:
         Korrigiert die Zeiten eines Eintrags mit Validierung.
 
         Raises:
-            TrackingError: bei end_at <= begin_at oder fehlendem end_at
-                für einen nicht aktiven Eintrag.
+            TrackingError: wenn der Eintrag soft-deleted ist, begin_at für
+            einen aktiven Eintrag in der Zukunft liegt, end_at <= begin_at
+            oder end_at für einen nicht aktiven Eintrag fehlt.
         """
+        if entry.deleted_at is not None:
+            raise TrackingError("Ein gelöschter Eintrag kann nicht bearbeitet werden")
+        if entry.is_active and begin_at > datetime.now():
+            raise TrackingError("begin_at darf nicht in der Zukunft liegen")
         if end_at is not None and end_at <= begin_at:
             raise TrackingError("end_at muss nach begin_at liegen")
         if entry.is_active and end_at is not None:

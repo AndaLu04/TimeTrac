@@ -115,6 +115,41 @@ class TestExportService(unittest.TestCase):
         csv = self.service.export_csv(self.project, day, day)
         self.assertEqual(len(csv.strip().split("\n")), 2)
 
+    def test_formula_leading_text_is_neutralized(self):
+        """Werte mit führendem =, +, -, @ werden mit ' maskiert (Formelinjektion)."""
+        day = date(2026, 11, 16)
+        self._add_entry(
+            day,
+            datetime.min.time().replace(hour=8),
+            datetime.min.time().replace(hour=9),
+            notes="=BÖSEWICHT()",
+        )
+        csv = self.service.export_csv(self.project, day, day)
+        self.assertIn("'=BÖSEWICHT()", csv)
+
+    def test_normal_notes_are_unchanged(self):
+        day = date(2026, 11, 16)
+        self._add_entry(
+            day,
+            datetime.min.time().replace(hour=8),
+            datetime.min.time().replace(hour=9),
+            notes="Jugendgruppe",
+        )
+        csv = self.service.export_csv(self.project, day, day)
+        self.assertIn("Jugendgruppe", csv)
+        self.assertNotIn("'Jugendgruppe", csv)
+
+    def test_numeric_columns_stay_unchanged(self):
+        """Numerische Spalten (Pause, Dauer) werden nicht maskiert."""
+        day = date(2026, 11, 16)
+        self._add_entry(
+            day,
+            datetime.min.time().replace(hour=8),
+            datetime.min.time().replace(hour=16),
+        )
+        csv = self.service.export_csv(self.project, day, day)
+        self.assertIn("16:00", csv)
+
     def test_midnight_span_exported_on_entry_date(self):
         day = date(2026, 11, 16)
         Entry(

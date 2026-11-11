@@ -45,8 +45,8 @@ class ExportService:
                     entry.end_at.strftime("%H:%M") if entry.end_at else "",
                     entry.break_minutes,
                     entry.entry_type.value,
-                    project.name,
-                    entry.notes or "",
+                    self._neutralize_formula(project.name),
+                    self._neutralize_formula(entry.notes or ""),
                     self._format_hours(entry.duration, decimal_separator),
                 ]
             )
@@ -55,3 +55,9 @@ class ExportService:
     def _format_hours(self, duration, decimal_separator: str) -> str:
         hours = duration.total_seconds() / 3600
         return f"{hours:.2f}".replace(".", decimal_separator)
+
+    def _neutralize_formula(self, text: str) -> str:
+        """Neutralisiert Formelinjektion: führende =, +, -, @ werden mit ' maskiert."""
+        if text and text[0] in ("=", "+", "-", "@"):
+            return f"'{text}"
+        return text

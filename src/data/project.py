@@ -294,10 +294,10 @@ class Project:
                 )
             try:
                 weekday = int(key)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as error:
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value!r}"
-                )
+                ) from error
             if weekday < 0 or weekday > 6:
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value!r}"

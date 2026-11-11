@@ -146,9 +146,27 @@ class TestExportService(unittest.TestCase):
             day,
             datetime.min.time().replace(hour=8),
             datetime.min.time().replace(hour=16),
+            break_minutes=30,
         )
         csv = self.service.export_csv(self.project, day, day)
-        self.assertIn("16:00", csv)
+        data_row = csv.strip().split("\n")[1]
+        self.assertIn(",30,Arbeit,", data_row)
+        self.assertIn('"8,00"', data_row)
+        self.assertNotIn("'30", data_row)
+        self.assertNotIn("'8,00", data_row)
+
+    def test_formula_leading_project_name_is_neutralized(self):
+        """Auch ein Projektname mit führendem = wird maskiert."""
+        day = date(2026, 11, 16)
+        project = Project(self.db, None, '=HYPERLINK("böse")', 8, HourType.DAILY)
+        self._add_entry(
+            day,
+            datetime.min.time().replace(hour=8),
+            datetime.min.time().replace(hour=9),
+            project=project,
+        )
+        csv = self.service.export_csv(project, day, day)
+        self.assertIn("'=HYPERLINK", csv)
 
     def test_all_formula_prefixes_are_neutralized(self):
         """Notizen mit führendem =, +, -, @ werden jeweils mit ' maskiert."""

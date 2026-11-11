@@ -10,85 +10,33 @@ from data.settings import SettingsRepository
 from data.sync.sync_backend import SyncBackend
 
 
-def _legacy_database_path(tmpdir: str) -> str:
-    """Erzeugt eine Datenbank im alten Schema (ohne die neuen Spalten)."""
-    path = os.path.join(tmpdir, "legacy.db")
-    with database_cursor(path) as cursor:
-        cursor.execute("""
-            CREATE TABLE projects
-            (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                target_hours REAL NOT NULL,
-                hour_type hour_type NOT NULL,
-                is_default BOOLEAN NOT NULL
-            );
-            """)
-        cursor.execute("""
-            CREATE TABLE entries(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id INTEGER NOT NULL,
-                entry_type entry_type NOT NULL,
-                is_active BOOLEAN NOT NULL,
-                created_at datetime NOT NULL,
-                edited_at datetime,
-                entry_date DATE NOT NULL,
-                begin_at datetime,
-                end_at datetime,
-                notes TEXT,
-                FOREIGN KEY (project_id) REFERENCES projects(id)
-            );
-            """)
-        cursor.execute(
-            "INSERT INTO projects (name, target_hours, hour_type, is_default) VALUES ('Alt', 20, 'Weekly', 1)"
-        )
-        cursor.execute(
-            "INSERT INTO entries (project_id, entry_type, is_active, created_at, entry_date) "
-            "VALUES (1, 'Arbeit', 0, '2026-01-05 08:00:00', '2026-01-05')"
-        )
-    return path
-
-
-class TestMigrations(unittest.TestCase):
-    """Additive Migrationen: Bestandsdatenbank ohne neue Spalten."""
+class TestFreshSchema(unittest.TestCase):
+    """Neue Spalten liegen direkt im CREATE-TABLE-Layout (keine Migration, pre-v1)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.db_path = _legacy_database_path(self._tmp.name)
+        self.db_path = os.path.join(self._tmp.name, "test.db")
         self.db = Database(database_path=self.db_path)
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def test_new_columns_exist_after_migration(self):
+    def test_projects_schema_contains_new_columns(self):
         with database_cursor(self.db_path) as cursor:
             cursor.execute("PRAGMA table_info(projects)")
-            project_columns = {row[1] for row in cursor.fetchall()}
-            cursor.execute("PRAGMA table_info(entries)")
-            entry_columns = {row[1] for row in cursor.fetchall()}
+            columns = {row[1] for row in cursor.fetchall()}
         self.assertTrue(
-            {"workdays", "daily_hours_override", "is_active", "notes"}
-            <= project_columns
+            {"workdays", "daily_hours_override", "is_active", "notes"} <= columns
         )
+
+    def test_entries_schema_contains_new_columns(self):
+        with database_cursor(self.db_path) as cursor:
+            cursor.execute("PRAGMA table_info(entries)")
+            columns = {row[1] for row in cursor.fetchall()}
         self.assertTrue(
             {"break_minutes", "project_label", "counts_as_work", "deleted_at"}
-            <= entry_columns
+            <= columns
         )
-
-    def test_legacy_data_survives_migration(self):
-        self.assertEqual(self.db.get(Tables.projects, 1, "name"), "Alt")
-        self.assertEqual(self.db.get(Tables.projects, 1, "target_hours"), 20.0)
-        self.assertEqual(self.db.get(Tables.entries, 1, "entry_type"), EntryType.ARBEIT)
-
-    def test_defaults_are_applied(self):
-        self.assertEqual(self.db.get(Tables.projects, 1, "workdays"), "[0,1,2,3,4]")
-        self.assertEqual(self.db.get(Tables.projects, 1, "is_active"), True)
-        self.assertEqual(self.db.get(Tables.entries, 1, "break_minutes"), 0)
-        self.assertIsNone(self.db.get(Tables.entries, 1, "deleted_at"))
-
-    def test_migration_is_idempotent(self):
-        Database(database_path=self.db_path)
-        self.assertEqual(self.db.get(Tables.projects, 1, "name"), "Alt")
 
     def test_settings_table_exists(self):
         with database_cursor(self.db_path) as cursor:
@@ -96,6 +44,16 @@ class TestMigrations(unittest.TestCase):
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='settings'"
             )
             self.assertIsNotNone(cursor.fetchone())
+
+    def test_defaults_are_applied(self):
+        project = Project(self.db, None, "Standard", 40)
+        self.assertEqual(
+            self.db.get(Tables.projects, project.id, "workdays"), "[0,1,2,3,4]"
+        )
+        self.assertEqual(self.db.get(Tables.projects, project.id, "is_active"), True)
+        entry = Entry(self.db, None, project.id)
+        self.assertEqual(self.db.get(Tables.entries, entry.id, "break_minutes"), 0)
+        self.assertIsNone(self.db.get(Tables.entries, entry.id, "deleted_at"))
 
 
 class TestSettingsRepository(unittest.TestCase):

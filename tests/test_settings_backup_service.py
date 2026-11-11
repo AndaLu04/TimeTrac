@@ -4,8 +4,8 @@ import unittest
 from datetime import date, datetime
 from pathlib import Path
 
-from constants import HourType, Tables
-from data.database import Database, database_cursor
+from constants import HourType
+from data.database import Database
 from data.entry import Entry
 from data.project import Project
 from logic.backup_service import BackupError, BackupService
@@ -104,29 +104,6 @@ class TestBackupService(unittest.TestCase):
         live = Database(database_path=self.db_path)
         self.assertEqual(len(live.get_all_project_ids()), 1)
         self.assertEqual(len(live.get_entry_ids_from_project_id(1)), 1)
-
-    def test_import_migrates_old_schema_backup(self):
-        """Backups im Altschema werden beim Import migriert (Staging-Phase)."""
-        from tests.test_migrations import _legacy_database_path
-
-        legacy = Path(_legacy_database_path(self._tmp.name))
-        self.service.import_backup(legacy)
-        restored = Database(database_path=self.db_path)
-        self.assertEqual(restored.get_all_project_ids(), [1])
-        self.assertEqual(restored.get(Tables.projects, 1, "workdays"), "[0,1,2,3,4]")
-        self.assertTrue(Database.is_valid_database(Path(self.db_path)))
-        with database_cursor(self.db_path) as cursor:
-            cursor.execute("PRAGMA table_info(entries)")
-            entry_columns = {row[1] for row in cursor.fetchall()}
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='settings'"
-            )
-            settings_table = cursor.fetchone()
-        self.assertTrue(
-            {"break_minutes", "project_label", "counts_as_work", "deleted_at"}
-            <= entry_columns
-        )
-        self.assertIsNotNone(settings_table)
 
     def test_import_leaves_no_staging_file(self):
         target = Path(self._tmp.name) / "backup.db"

@@ -121,8 +121,10 @@ class TestMonthlyModel(ModelTestBase):
         )
 
     def test_total_since_sums_months(self):
+        """Seit Monatsbeginn trägt genau ein Monatsziel zum Gesamt bei."""
         model = MonthlyModel(self.make_project(HourType.MONTHLY, 20))
-        self.assertEqual(model.target_hours_total(date(2026, 11, 1)), 20.0)
+        first_of_current_month = date(date.today().year, date.today().month, 1)
+        self.assertEqual(model.target_hours_total(first_of_current_month), 20.0)
 
 
 class TestAllTimeModel(ModelTestBase):

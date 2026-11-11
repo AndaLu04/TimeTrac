@@ -178,6 +178,23 @@ class TestExtendedColumns(unittest.TestCase):
         self.assertFalse(reloaded.is_active)
         self.assertEqual(reloaded.notes, "Di-Sa")
 
+    def test_daily_hours_override_normalizes_string_keys(self):
+        """Schlüssel werden zu int normalisiert; Cache und DB nutzen dieselbe Form."""
+        project = Project(self.db, None, "Test", 8)
+        project.daily_hours_override = {"1": 6.0, 2: 8.0}
+        self.assertEqual(project.daily_hours_override, {1: 6.0, 2: 8.0})
+        reloaded = Project(self.db, project.id)
+        self.assertEqual(reloaded.daily_hours_override, {1: 6.0, 2: 8.0})
+
+    def test_daily_hours_override_rejects_invalid_weekday(self):
+        project = Project(self.db, None, "Test", 8)
+        with self.assertRaises(TypeError):
+            project.daily_hours_override = {9: 6.0}
+        with self.assertRaises(TypeError):
+            project.daily_hours_override = {"montag": 6.0}
+        with self.assertRaises(TypeError):
+            project.daily_hours_override = {True: 6.0}
+
     def test_workdays_rejects_invalid_weekday(self):
         project = Project(self.db, None, "Test", 40)
         with self.assertRaises(TypeError):

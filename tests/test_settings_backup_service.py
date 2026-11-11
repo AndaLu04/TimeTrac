@@ -4,7 +4,7 @@ import unittest
 from datetime import date, datetime
 from pathlib import Path
 
-from constants import HourType
+from constants import HourType, Tables
 from data.database import Database
 from data.entry import Entry
 from data.project import Project
@@ -94,6 +94,35 @@ class TestBackupService(unittest.TestCase):
         bogus.write_text("keine datenbank")
         with self.assertRaises(BackupError):
             self.service.import_backup(bogus)
+
+    def test_failed_import_leaves_live_database_intact(self):
+        """Bei Ablehnung bleibt die Live-DB vollständig erhalten."""
+        bogus = Path(self._tmp.name) / "bogus.db"
+        bogus.write_text("keine datenbank")
+        with self.assertRaises(BackupError):
+            self.service.import_backup(bogus)
+        live = Database(database_path=self.db_path)
+        self.assertEqual(len(live.get_all_project_ids()), 1)
+        self.assertEqual(len(live.get_entry_ids_from_project_id(1)), 1)
+
+    def test_import_migrates_old_schema_backup(self):
+        """Backups im Altschema werden beim Import migriert (Staging-Phase)."""
+        from tests.test_migrations import _legacy_database_path
+
+        legacy = Path(_legacy_database_path(self._tmp.name))
+        self.service.import_backup(legacy)
+        restored = Database(database_path=self.db_path)
+        self.assertEqual(restored.get_all_project_ids(), [1])
+        self.assertEqual(restored.get(Tables.projects, 1, "workdays"), "[0,1,2,3,4]")
+
+    def test_import_leaves_no_staging_file(self):
+        target = Path(self._tmp.name) / "backup.db"
+        self.service.export_backup(target)
+        self.service.import_backup(target)
+        leftovers = [
+            p for p in Path(self._tmp.name).iterdir() if p.name.endswith(".tmp")
+        ]
+        self.assertEqual(leftovers, [])
 
     def test_import_rejects_missing_file(self):
         with self.assertRaises(BackupError):

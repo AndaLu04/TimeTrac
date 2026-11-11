@@ -85,6 +85,40 @@ class TestHolidayImportService(unittest.TestCase):
         created = self.service.import_ics(self.ics_path, self.project)
         self.assertEqual(len(created), 3)
 
+    def test_invalid_dtstart_is_skipped(self):
+        """Ungültige DTSTART-Werte überspringen das Event, brechen den Import nicht ab."""
+        broken = Path(self._tmp.name) / "broken.ics"
+        broken.write_text(
+            "BEGIN:VCALENDAR\n"
+            "BEGIN:VEVENT\n"
+            "SUMMARY:Kaputtes Datum\n"
+            "DTSTART;VALUE=DATE:20261340\n"
+            "END:VEVENT\n"
+            "BEGIN:VEVENT\n"
+            "SUMMARY:Reformationstag\n"
+            "DTSTART;VALUE=DATE:20261031\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n",
+            encoding="utf-8",
+        )
+        created = self.service.import_ics(broken, self.project)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].entry_date, date(2026, 10, 31))
+
+    def test_non_digit_dtstart_is_skipped(self):
+        broken = Path(self._tmp.name) / "broken2.ics"
+        broken.write_text(
+            "BEGIN:VCALENDAR\n"
+            "BEGIN:VEVENT\n"
+            "SUMMARY:Kein Datum\n"
+            "DTSTART;VALUE=DATE:heute\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR\n",
+            encoding="utf-8",
+        )
+        created = self.service.import_ics(broken, self.project)
+        self.assertEqual(created, [])
+
     def test_missing_file_raises(self):
         with self.assertRaises(FileNotFoundError):
             self.service.import_ics(

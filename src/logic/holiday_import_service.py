@@ -66,7 +66,16 @@ class HolidayImportService:
                     events.append((current_date, current_summary))
                 in_event = False
             elif in_event and line.startswith("DTSTART;VALUE=DATE:"):
-                current_date = date(int(line[-8:-4]), int(line[-4:-2]), int(line[-2:]))
+                value = line.split("DTSTART;VALUE=DATE:", 1)[1]
+                if len(value) == 8 and value.isdigit():
+                    try:
+                        current_date = date(
+                            int(value[:4]), int(value[4:6]), int(value[6:])
+                        )
+                    except ValueError:
+                        current_date = None
+                else:
+                    current_date = None
             elif in_event and line.startswith("SUMMARY:"):
                 current_summary = line.split("SUMMARY:", 1)[1]
         return events

@@ -321,7 +321,7 @@ class Project:
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 ) from error
-            if not isinstance(key, int) or not 0 <= key <= 6:
+            if not isinstance(weekday, int) or not 0 <= weekday <= 6:
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 )

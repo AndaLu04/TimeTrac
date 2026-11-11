@@ -48,7 +48,7 @@ class Project:
         self._target_hours: float | None = None
         self._hour_type: HourType | None = None
         self._is_default: bool | None = None
-        self._workdays: list[int] | None = None
+        self._workdays: set[int] | None = None
         self._daily_hours_override: dict[int, float] | None = None
         self._is_active: bool | None = None
         self._notes: str | None = None
@@ -237,7 +237,7 @@ class Project:
             )
 
     @property
-    def workdays(self) -> list[int]:
+    def workdays(self) -> set[int]:
         """
         Get the configured working days (ISO weekdays, Monday=0 ... Sunday=6).
 
@@ -245,13 +245,13 @@ class Project:
         """
         if self._workdays is None:
             raw = self.db.get(self.table, self.id, "workdays")
-            self._workdays = list(loads(raw))
+            self._workdays = set(loads(raw))
         return self._workdays
 
     @workdays.setter
-    def workdays(self, value: list[int]) -> None:
+    def workdays(self, value: set[int]) -> None:
         """Set the working days (persists automatically as JSON list)."""
-        days = value
+        days = set(value)
         if not days:
             raise TypeError("'workdays' must not be empty")
         if any(
@@ -288,7 +288,7 @@ class Project:
             )
         normalized = {}
         for key, hours in value.items():
-            if isinstance(key, bool) or not isinstance(key, int) or not 0 <= key <= 6:
+            if isinstance(key, bool) or not isinstance(key, (int, str)):
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 )

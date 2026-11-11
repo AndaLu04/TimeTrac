@@ -27,6 +27,10 @@ class Project:
         target_hours: float = 0,
         hour_type: HourType | None = HourType.WEEKLY,
         is_default: bool | None = False,
+        workdays: list[int] | set[int] | None = None,
+        daily_hours_override: dict[int, float] | None = None,
+        is_active: bool = True,
+        notes: str | None = None,
     ):
         """
         Initialize a new or existing Project.
@@ -41,6 +45,10 @@ class Project:
             target_hours: The target hours for this project. Defaults to 0.
             hour_type: The type of hour tracking (from HourType enum). Defaults to None.
             is_default: Whether this is the default project. Defaults to None.
+            workdays: ISO weekdays (0=Monday ... 6=Sunday). Defaults to Monday-Friday.
+            daily_hours_override: Per-weekday target hours. Defaults to empty dict.
+            is_active: Whether this project is active. Defaults to True.
+            notes: Optional project note. Defaults to None.
         """
         self.db = db
         self.table = Tables.projects
@@ -48,7 +56,7 @@ class Project:
         self._target_hours: float | None = None
         self._hour_type: HourType | None = None
         self._is_default: bool | None = None
-        self._workdays: list[int] | None = None
+        self._workdays: set[int] | None = None
         self._daily_hours_override: dict[int, float] | None = None
         self._is_active: bool | None = None
         self._notes: str | None = None
@@ -63,6 +71,12 @@ class Project:
             self.target_hours = target_hours
             self.hour_type = hour_type
             self.is_default = is_default
+            self.workdays = workdays if workdays is not None else {0, 1, 2, 3, 4}
+            self.daily_hours_override = (
+                daily_hours_override if daily_hours_override is not None else {}
+            )
+            self.is_active = is_active
+            self.notes = notes
             self._init = False
 
             self.id = self.db.insert_new_row(
@@ -71,6 +85,10 @@ class Project:
                     "target_hours": target_hours,
                     "hour_type": hour_type,
                     "is_default": is_default,
+                    "workdays": dumps(sorted(self._workdays), separators=(",", ":")),
+                    "daily_hours_override": dumps(self._daily_hours_override),
+                    "is_active": self._is_active,
+                    "notes": self._notes,
                 },
                 table=self.table,
             )
@@ -237,7 +255,7 @@ class Project:
             )
 
     @property
-    def workdays(self) -> list[int]:
+    def workdays(self) -> set[int]:
         """
         Get the configured working days (ISO weekdays, Monday=0 ... Sunday=6).
 
@@ -245,11 +263,11 @@ class Project:
         """
         if self._workdays is None:
             raw = self.db.get(self.table, self.id, "workdays")
-            self._workdays = list(loads(raw))
+            self._workdays = set(loads(raw))
         return self._workdays
 
     @workdays.setter
-    def workdays(self, value: list[int]) -> None:
+    def workdays(self, value: list[int] | set[int]) -> None:
         """Set the working days (persists automatically as JSON list)."""
         days = value
         if not days:
@@ -261,9 +279,14 @@ class Project:
             raise TypeError(
                 f"'workdays' must contain ISO weekdays 0-6, but is {value.__class__.__name__}"
             )
-        self._workdays = days
+        self._workdays = set(days)
         if not self._init:
-            self.db.set(self.table, self.id, "workdays", dumps(sorted(days)))
+            self.db.set(
+                self.table,
+                self.id,
+                "workdays",
+                dumps(sorted(days), separators=(",", ":")),
+            )
 
     @property
     def daily_hours_override(self) -> dict[int, float]:
@@ -288,7 +311,7 @@ class Project:
             )
         normalized = {}
         for key, hours in value.items():
-            if isinstance(key, bool) or not isinstance(key, int) or not 0 <= key <= 6:
+            if isinstance(key, bool):
                 raise TypeError(
                     f"'daily_hours_override' keys must be ISO weekdays 0-6, but is {value.__class__.__name__}"
                 )

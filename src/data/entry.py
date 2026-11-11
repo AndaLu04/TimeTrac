@@ -32,6 +32,10 @@ class Entry:
         begin_at: datetime = None,
         end_at: datetime | None = None,
         notes: str | None = None,
+        break_minutes: int = 0,
+        project_label: str | None = None,
+        counts_as_work: bool | None = None,
+        deleted_at: datetime | None = None,
     ):
         """
         Initialize a new or existing Entry.
@@ -51,6 +55,10 @@ class Entry:
             begin_at: When the entry begins. Defaults to current datetime.
             end_at: When the entry ends. Defaults to None (ongoing).
             notes: Optional notes for the entry. Defaults to None.
+            break_minutes: Break duration in minutes. Defaults to 0.
+            project_label: Optional free-text activity label. Defaults to None.
+            counts_as_work: Whether this entry counts as work (None = per entry_type).
+            deleted_at: Optional soft-delete timestamp. Defaults to None.
         """
         self.db = db
         self.table = Tables.entries
@@ -96,6 +104,10 @@ class Entry:
             self.begin_at = begin_at
             self.end_at = end_at
             self.notes = notes
+            self.break_minutes = break_minutes
+            self.project_label = project_label
+            self.counts_as_work = counts_as_work
+            self.deleted_at = deleted_at
             self._init = False
             self.id = self.db.insert_new_row(
                 content={
@@ -108,6 +120,10 @@ class Entry:
                     "begin_at": self._begin_at,
                     "end_at": self._end_at,
                     "notes": self._notes,
+                    "break_minutes": self._break_minutes,
+                    "project_label": self._project_label,
+                    "counts_as_work": self._counts_as_work,
+                    "deleted_at": self._deleted_at,
                 },
                 table=self.table,
             )

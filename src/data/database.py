@@ -174,7 +174,7 @@ class Database:
         """
         with database_cursor(self.database_path) as cursor:
             cursor.execute(
-                "SELECT id FROM entries WHERE is_active = 1 AND deleted_at IS NULL"
+                "SELECT id FROM entries WHERE is_active = 1"
             )
             row = cursor.fetchone()
         return row[0] if row else None

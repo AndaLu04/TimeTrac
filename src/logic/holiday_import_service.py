@@ -127,4 +127,4 @@ class HolidayImportService:
 
     def _holiday_entry_exists(self, project: Project, day: date) -> bool:
         """Prüft, ob für das Projekt bereits ein Feiertag am Tag existiert."""
-        return self.db.entry_exists(project.id, EntryType.FEIERTAG, day)
+        return self.db.entry_of_type_exists(project.id, EntryType.FEIERTAG, day)

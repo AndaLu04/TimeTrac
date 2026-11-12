@@ -202,7 +202,7 @@ class Database:
             return [row[0] for row in cursor.fetchall()]
 
 
-    def entry_exists(
+    def entry_of_type_exists(
         self, project_id: int, entry_type: EntryType, entry_date: date
     ) -> bool:
         """

@@ -201,22 +201,6 @@ class Database:
             )
             return [row[0] for row in cursor.fetchall()]
 
-    def get_first_entry_date(self, project_id: int) -> date | None:
-        """
-        Retrieve the earliest entry_date of non-deleted entries of a project.
-
-        Returns:
-            The earliest entry_date, or None if the project has no entries.
-        """
-        with database_cursor(self.database_path) as cursor:
-            cursor.execute(
-                "SELECT MIN(entry_date) FROM entries WHERE project_id = ? AND deleted_at IS NULL",
-                (project_id,),
-            )
-            row = cursor.fetchone()
-        if not row or row[0] is None:
-            return None
-        return row[0] if isinstance(row[0], date) else date.fromisoformat(str(row[0]))
 
     def entry_exists(
         self, project_id: int, entry_type: EntryType, entry_date: date

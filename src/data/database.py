@@ -265,7 +265,7 @@ class Database:
         Retrieve all row IDs from a database table.
 
         Args:
-            table: The Tables enum value for the target table.
+            project_id: The project ID to filter by.
 
         Returns:
             A list of integer row IDs.
@@ -315,9 +315,6 @@ class Database:
         Create the projects table if it doesn't exist.
 
         This is a private method called during Database initialization.
-
-        Args:
-            database_path: Path to the SQLite database file. Defaults to DATABASE constant.
         """
         with database_cursor(self.database_path) as cursor:
             cursor.execute("""
@@ -353,8 +350,6 @@ class Database:
         This is a private method called during Database initialization.
         Establishes a foreign key relationship to the projects table.
 
-        Args:
-            database_path: Path to the SQLite database file. Defaults to DATABASE constant.
         """
         with database_cursor(self.database_path) as cursor:
             cursor.execute("""
@@ -385,10 +380,20 @@ class Database:
 
 if __name__ == "__main__":
     database = Database()
-    content = {
-        "project_id": 0,
+    project = {
+        "name": "",
+        "target_hours": 0,
+        "hour_type": "",
+        "is_default": False,
+        "workdays": "",
+        "daily_hours_override": "",
+        "is_active": 1,
+        "notes": ""
+    }
+    entry = {
+        "project_id": 1,
         "entry_type": "test",
-        "is_active": True,
+        "is_active": False,
         "created_at": datetime.now(),
         "edited_at": None,
         "entry_date": date.today(),
@@ -396,4 +401,15 @@ if __name__ == "__main__":
         "end_at": None,
         "notes": "dev",
     }
-    database.insert_new_row(content=content, table=Tables.entries)
+    database.insert_new_row(project, Tables.projects)
+    database.insert_new_row(content=entry, table=Tables.entries)
+    projects = database.get_all_project_ids()
+    entries = {}
+    for project in projects:
+        _entry_id_list = []
+        for entry_id in database.get_entry_ids_from_project_id(project):
+            _entry_id_list.append(entry_id)
+        entries.update({project: _entry_id_list})
+
+
+    print(entries)

@@ -1,7 +1,7 @@
 from data.database import Database, Tables, database_cursor
 
 
-class SettingsRepository:
+class Settings:
     """
     Key-Value-Speicher für gerätelokale Einstellungen.
 

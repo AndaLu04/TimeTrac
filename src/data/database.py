@@ -299,7 +299,13 @@ class Database:
                          """
 
         with database_cursor(self.database_path) as cursor:
-            cursor.execute(statement, values)
+            try:
+                cursor.execute(statement, values)
+            except sqlite3.IntegrityError as e:
+                if e.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+                    raise ValueError(f"Entry cannot be made active. Current Active entry id: {self.get_active_entry_id()}")
+                else:
+                    raise e
             row_id = cursor.lastrowid
             print(f"Inserted row into database: table:{table.name}, row_id:{row_id}")
             return row_id

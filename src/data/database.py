@@ -92,6 +92,8 @@ def init_sqlite_converters_and_adapters():
 
 
 class Database:
+
+
     """
     Manages database operations for the time tracking system.
 
@@ -102,6 +104,72 @@ class Database:
         database_path: Path to the SQLite database file.
     """
 
+    def _create_table_projects(self) -> None:
+        """
+        Create the projects table if it doesn't exist.
+
+        This is a private method called during Database initialization.
+        """
+        with database_cursor(self.database_path) as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS projects
+                (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    target_hours REAL NOT NULL,
+                    hour_type hour_type NOT NULL,
+                    is_default BOOLEAN NOT NULL,
+                    workdays TEXT NOT NULL DEFAULT '[0,1,2,3,4]',
+                    daily_hours_override TEXT,
+                    is_active BOOLEAN NOT NULL DEFAULT 1,
+                    notes TEXT
+                );
+                """)
+
+    def _create_table_settings(self) -> None:
+        """Create the settings table (key-value) if it doesn't exist."""
+        with database_cursor(self.database_path) as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS settings
+                (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                );
+                """)
+
+    def _create_table_entries(self) -> None:
+        """
+        Create the entries table if it doesn't exist.
+
+        This is a private method called during Database initialization.
+        Establishes a foreign key relationship to the projects table.
+
+        """
+        with database_cursor(self.database_path) as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS entries(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
+                    entry_type entry_type NOT NULL,
+                    is_active BOOLEAN NOT NULL,
+                    created_at datetime NOT NULL,
+                    edited_at datetime,
+                    entry_date DATE NOT NULL,
+                    begin_at datetime,
+                    end_at datetime,
+                    notes TEXT,
+                    break_minutes INTEGER NOT NULL DEFAULT 0,
+                    project_label TEXT,
+                    counts_as_work BOOLEAN,
+                    deleted_at datetime,
+                    FOREIGN KEY (project_id) REFERENCES projects(id)
+                );
+                """)
+            cursor.execute("""
+                           CREATE UNIQUE INDEX IF NOT EXISTS single_true_index
+                               ON entries (is_active)
+                               WHERE is_active = 1
+                           """)
     def __init__(self, database_path: Path = DATABASE):
         """
         Initialize the Database instance.
@@ -293,73 +361,6 @@ class Database:
             row_id = cursor.lastrowid
             print(f"Inserted row into database: table:{table.name}, row_id:{row_id}")
             return row_id
-
-    def _create_table_projects(self) -> None:
-        """
-        Create the projects table if it doesn't exist.
-
-        This is a private method called during Database initialization.
-        """
-        with database_cursor(self.database_path) as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS projects
-                (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    target_hours REAL NOT NULL,
-                    hour_type hour_type NOT NULL,
-                    is_default BOOLEAN NOT NULL,
-                    workdays TEXT NOT NULL DEFAULT '[0,1,2,3,4]',
-                    daily_hours_override TEXT,
-                    is_active BOOLEAN NOT NULL DEFAULT 1,
-                    notes TEXT
-                );
-                """)
-
-    def _create_table_settings(self) -> None:
-        """Create the settings table (key-value) if it doesn't exist."""
-        with database_cursor(self.database_path) as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS settings
-                (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                );
-                """)
-
-    def _create_table_entries(self) -> None:
-        """
-        Create the entries table if it doesn't exist.
-
-        This is a private method called during Database initialization.
-        Establishes a foreign key relationship to the projects table.
-
-        """
-        with database_cursor(self.database_path) as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS entries(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER NOT NULL,
-                    entry_type entry_type NOT NULL,
-                    is_active BOOLEAN NOT NULL,
-                    created_at datetime NOT NULL,
-                    edited_at datetime,
-                    entry_date DATE NOT NULL,
-                    begin_at datetime,
-                    end_at datetime,
-                    notes TEXT,
-                    break_minutes INTEGER NOT NULL DEFAULT 0,
-                    project_label TEXT,
-                    counts_as_work BOOLEAN,
-                    deleted_at datetime,
-                    FOREIGN KEY (project_id) REFERENCES projects(id)
-                );
-                """)
-            cursor.execute("""
-                           CREATE UNIQUE INDEX IF NOT EXISTS single_true_index
-                               ON entries (is_active)
-                               WHERE is_active = 1
-                           """)
 
 
 if __name__ == "__main__":

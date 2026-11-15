@@ -1,51 +1,75 @@
-from data.database import Database, Tables, database_cursor
-
-
-class Settings:
+class SettingsAdapter:
     """
-    Key-Value-Speicher für gerätelokale Einstellungen.
+    Daten-Adapter für gerätelokale Einstellungen, gesichert als JSON-Datei.
 
-    Bewusst nicht synchronisiert (siehe ARCHITECTURE.md 3.5). Werte werden
-    als TEXT gespeichert; Aufrufer serialisieren komplexe Werte (z. B. JSON).
+    Der Adapter ist die einzige Zugriffsschicht auf die Einstellungsdatei
+    (siehe ARCHITECTURE.md 3.5). Werte werden als native JSON-Typen
+    (str, int, float, bool, list, dict, None) gespeichert.
 
     Attributes:
-        db: The Database instance used for persistence.
-        table: The database table (Tables.settings) where settings are stored.
+        file_path: Pfad zur JSON-Datei, in der die Einstellungen liegen.
     """
 
-    def __init__(self, db: Database):
+    def __init__(self, file_path: str):
         """
-        Initialize the SettingsRepository.
+        Initialisiert den Adapter mit dem Pfad zur Einstellungsdatei.
 
         Args:
-            db: The Database instance for persistence operations.
+            file_path: Pfad zur JSON-Datei. Existiert sie noch nicht, wird
+                sie beim ersten Schreibvorgang angelegt.
         """
-        self.db = db
-        self.table = Tables.settings
+        self.file_path = file_path
 
-    def set(self, key: str, value: str | None) -> None:
-        """Schreibt einen Wert unter einem Schlüssel (überschreibt vorhandene)."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (key, value),
-            )
+    def get(self, key: str, default=None):
+        """
+        Liest den Wert eines Schlüssels.
 
-    def get(self, key: str, default: str | None = None) -> str | None:
-        """Liest einen Wert, mit Default bei fehlendem Schlüssel."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute("SELECT value FROM settings WHERE key=?", (key,))
-            row = cursor.fetchone()
-            return default if row is None else row[0]
+        Args:
+            key: Schlüssel des Eintrags.
+            default: Rückgabewert, wenn der Schlüssel nicht existiert.
+
+        Returns:
+            Der gespeicherte Wert oder `default`.
+        """
+
+    def set(self, key: str, value) -> None:
+        """
+        Schreibt einen Wert unter einem Schlüssel (überschreibt vorhandene).
+
+        Args:
+            key: Schlüssel des Eintrags.
+            value: Wert als nativer JSON-Typ.
+        """
 
     def delete(self, key: str) -> None:
-        """Entfernt einen Schlüssel aus der Tabelle."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute("DELETE FROM settings WHERE key=?", (key,))
+        """
+        Entfernt einen Schlüssel aus der Datei.
+
+        Args:
+            key: Schlüssel des zu löschenden Eintrags.
+        """
 
     def keys(self) -> list[str]:
-        """Listet alle vorhandenen Schlüssel aufsteigend."""
-        with database_cursor(self.db.database_path) as cursor:
-            cursor.execute("SELECT key FROM settings ORDER BY key")
-            return [row[0] for row in cursor.fetchall()]
+        """
+        Listet alle vorhandenen Schlüssel aufsteigend auf.
+
+        Returns:
+            Sortierte Liste aller Schlüssel.
+        """
+
+    def _load(self) -> dict:
+        """
+        Liest die Datei in ein Wörterbuch.
+
+        Returns:
+            Alle Einstellungen als Wörterbuch; bei fehlender oder
+            korrupter Datei ein leeres Wörterbuch.
+        """
+
+    def _save(self, data: dict) -> None:
+        """
+        Schreibt das Wörterbuch atomar in die Datei.
+
+        Args:
+            data: Alle Einstellungen als Wörterbuch.
+        """

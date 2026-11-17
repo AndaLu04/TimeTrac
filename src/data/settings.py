@@ -48,7 +48,7 @@ class Settings:
     #: UI-Sprache (de/en).
     language: Annotated[str, Sync] = "de"
     #: Vorausgewähltes Projekt beim Einstempeln.
-    active_project_id: int | None = None
+    active_project_id: Annotated[int | None, Sync] = None
     #: Standard-Pausendauer in Minuten.
     default_break_minutes: Annotated[int, Sync] = 0
     #: CSV-Trennzeichen, frei eintragbar (Textfeld).
@@ -58,13 +58,13 @@ class Settings:
     #: Sync-Backend (none/webdav/gdrive/file).
     sync_backend: str = "none"
     #: Sync-Konfiguration (URL, Zugangsdaten).
-    sync_config: dict = None
+    sync_config: dict | None = None
     #: ISO-Zeitstempel des letzten Backups.
     last_backup_at: str | None = None
     #: ISO-Zeitstempel des letzten Syncs.
-    last_sync_at: str | None = None
+    last_sync_at: Annotated[ str | None, Sync] = None
     #: Sichtbare Kacheln + Reihenfolge im Dashboard.
-    dashboard_layout: list = None
+    dashboard_layout: Annotated[list | None, Sync] = None
 
     # --- Ergänzende, potenziell benötigte Einstellungen -------------------
 
@@ -74,8 +74,6 @@ class Settings:
     start_screen: str = "dashboard"
     #: Überstundenstand in Stunden, ab dem gewarnt wird.
     overtime_warning_threshold: Annotated[float, Sync, Validated] = 0.0
-    #: Änderungen automatisch in die JSON-Datei schreiben.
-    auto_save_active: bool = True
 
     def __init__(self, file_path: str) -> None:
         """
@@ -117,11 +115,6 @@ class Settings:
     def save(self) -> None:
         """
         Schreibt alle Einstellungen atomar in die JSON-Datei.
-        """
-
-    def _persist_if_auto_save(self) -> None:
-        """
-        Schreibt die Einstellungen weg, sofern auto_save_active gesetzt ist.
         """
 
     # --- Validierung (freie Textfelder) ------------------------------------

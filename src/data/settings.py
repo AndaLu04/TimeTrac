@@ -1,75 +1,159 @@
-class SettingsAdapter:
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Settings:
     """
-    Daten-Adapter für gerätelokale Einstellungen, gesichert als JSON-Datei.
+    Datenklasse für alle gerätelokalen Einstellungen (ARCHITECTURE.md 3.5).
 
-    Der Adapter ist die einzige Zugriffsschicht auf die Einstellungsdatei
-    (siehe ARCHITECTURE.md 3.5). Werte werden als native JSON-Typen
-    (str, int, float, bool, list, dict, None) gespeichert.
+    Die JSON-Datei dient als persistenter Speicher: Beim Startup werden alle
+    Einstellungen geladen; jede Änderung wird sofort zurückgeschrieben.
 
-    Attributes:
-        file_path: Pfad zur JSON-Datei, in der die Einstellungen liegen.
+    Sync-Konzept (vorbereitet, in v1 ohne Sync):
+        Jede Einstellung ist fest (hardcodiert) als GLOBAL (wird synchronisiert)
+        oder LOKAL (wird nicht synchronisiert) klassifiziert – siehe
+        SYNC_SCOPE. Der Nutzer hat darauf keinen Einfluss.
+
+    Textfeld-Validierung:
+        Einstellungen ohne festes Auswahlfeld (z. B. csv_delimiter) werden
+        vor dem Speichern über die zugehörige validate_*-Methode geprüft.
     """
 
-    def __init__(self, file_path: str):
+    # --- Persistenz ---------------------------------------------------------
+
+    #: Pfad zur JSON-Datei, in der die Einstellungen gespeichert werden.
+    file_path: str
+
+    # --- Einstellungen laut ARCHITECTURE.md 3.5 ---------------------------
+
+    #: UI-Sprache (de/en) – GLOBAL.
+    language: str = "de"
+    #: Vorausgewähltes Projekt beim Einstempeln – LOKAL.
+    active_project_id: int | None = None
+    #: Standard-Pausendauer in Minuten – GLOBAL.
+    default_break_minutes: int = 0
+    #: CSV-Trennzeichen, frei eintragbar (Textfeld) – LOKAL.
+    csv_delimiter: str = ","
+    #: Dezimaltrennzeichen im CSV-Export – LOKAL.
+    csv_decimal_separator: str = "."
+    #: Sync-Backend (none/webdav/gdrive/file) – LOKAL.
+    sync_backend: str = "none"
+    #: Sync-Konfiguration (URL, Zugangsdaten) – LOKAL.
+    sync_config: dict = field(default_factory=dict)
+    #: ISO-Zeitstempel des letzten Backups – LOKAL.
+    last_backup_at: str | None = None
+    #: ISO-Zeitstempel des letzten Syncs – LOKAL.
+    last_sync_at: str | None = None
+    #: Sichtbare Kacheln + Reihenfolge im Dashboard – LOKAL.
+    dashboard_layout: list = field(default_factory=list)
+
+    # --- Ergänzende, potenziell benötigte Einstellungen -------------------
+
+    #: Farbschema der Oberfläche (light/dark/system) – LOKAL.
+    ui_theme: str = "light"
+    #: Screen, der beim Start angezeigt wird – LOKAL.
+    start_screen: str = "dashboard"
+    #: Überstundenstand in Stunden, ab dem gewarnt wird – GLOBAL.
+    overtime_warning_threshold: float = 0.0
+    #: Änderungen automatisch in die JSON-Datei schreiben – LOKAL.
+    auto_save_active: bool = True
+
+    # --- Sync-Klassifikation (hardcodiert, keine Nutzereingabe) -----------
+
+    #: Fest definiert, welche Einstellung GLOBAL (sync) bzw. LOKAL (kein
+    #: Sync) ist. Schlüssel = Attributname, Wert = "global" | "local".
+    SYNC_SCOPE: dict = field(
+        default_factory=lambda: {
+            "language": "global",
+            "active_project_id": "local",
+            "default_break_minutes": "global",
+            "csv_delimiter": "local",
+            "csv_decimal_separator": "local",
+            "sync_backend": "local",
+            "sync_config": "local",
+            "last_backup_at": "local",
+            "last_sync_at": "local",
+            "dashboard_layout": "local",
+            "ui_theme": "local",
+            "start_screen": "local",
+            "overtime_warning_threshold": "global",
+            "auto_save_active": "local",
+        },
+        init=False,
+    )
+
+    def __post_init__(self) -> None:
         """
-        Initialisiert den Adapter mit dem Pfad zur Einstellungsdatei.
+        Lädt nach dem Startup alle Einstellungen aus der JSON-Datei.
+
+        Fehlende Schlüssel behalten ihre Default-Werte; eine fehlende oder
+        korrupte Datei führt zu den Defaults (kein Absturz beim Startup).
+        """
+
+    # --- Persistenz --------------------------------------------------------
+
+    def save(self) -> None:
+        """
+        Schreibt alle Einstellungen atomar in die JSON-Datei.
+        """
+
+    def _persist_if_auto_save(self) -> None:
+        """
+        Schreibt die Einstellungen nach einer Änderung weg, sofern
+        auto_save_active gesetzt ist.
+        """
+
+    # --- Validierung (Textfelder ohne Auswahlfeld) -------------------------
+
+    def validate_csv_delimiter(self, value: str) -> bool:
+        """
+        Prüft ein frei eintragbares CSV-Trennzeichen.
 
         Args:
-            file_path: Pfad zur JSON-Datei. Existiert sie noch nicht, wird
-                sie beim ersten Schreibvorgang angelegt.
-        """
-        self.file_path = file_path
-
-    def get(self, key: str, default=None):
-        """
-        Liest den Wert eines Schlüssels.
-
-        Args:
-            key: Schlüssel des Eintrags.
-            default: Rückgabewert, wenn der Schlüssel nicht existiert.
+            value: Vorschlag für das Trennzeichen.
 
         Returns:
-            Der gespeicherte Wert oder `default`.
+            True, wenn das Trennzeichen gültig ist (genau ein Zeichen,
+            keine Ziffer, kein Anführungszeichen).
         """
 
-    def set(self, key: str, value) -> None:
+    def validate_csv_decimal_separator(self, value: str) -> bool:
         """
-        Schreibt einen Wert unter einem Schlüssel (überschreibt vorhandene).
-
-        Args:
-            key: Schlüssel des Eintrags.
-            value: Wert als nativer JSON-Typ.
-        """
-
-    def delete(self, key: str) -> None:
-        """
-        Entfernt einen Schlüssel aus der Datei.
+        Prüft das Dezimaltrennzeichen.
 
         Args:
-            key: Schlüssel des zu löschenden Eintrags.
-        """
-
-    def keys(self) -> list[str]:
-        """
-        Listet alle vorhandenen Schlüssel aufsteigend auf.
+            value: Vorschlag für das Dezimaltrennzeichen.
 
         Returns:
-            Sortierte Liste aller Schlüssel.
+            True, wenn das Zeichen gültig ist (nur "." oder ",").
         """
 
-    def _load(self) -> dict:
+    def validate_overtime_warning_threshold(self, value: float) -> bool:
         """
-        Liest die Datei in ein Wörterbuch.
-
-        Returns:
-            Alle Einstellungen als Wörterbuch; bei fehlender oder
-            korrupter Datei ein leeres Wörterbuch.
-        """
-
-    def _save(self, data: dict) -> None:
-        """
-        Schreibt das Wörterbuch atomar in die Datei.
+        Prüft die Überstunden-Warnschwelle.
 
         Args:
-            data: Alle Einstellungen als Wörterbuch.
+            value: Vorschlag für die Schwelle in Stunden.
+
+        Returns:
+            True, wenn der Wert gültig ist (nicht negativ).
+        """
+
+    # --- Sync-Vorbereitung --------------------------------------------------
+
+    def get_sync_payload(self) -> dict:
+        """
+        Liefert nur die GLOBALen Einstellungen für einen zukünftigen Sync.
+
+        Returns:
+            Wörterbuch mit allen Einstellungen, deren SYNC_SCOPE "global"
+            ist.
+        """
+
+    def apply_sync_payload(self, payload: dict) -> None:
+        """
+        Übernimmt empfangene globale Einstellungen (Last-Writer-Wins).
+
+        Args:
+            payload: Wörterbuch mit globalen Einstellungen vom Sync-Backend.
         """

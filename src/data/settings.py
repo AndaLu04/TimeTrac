@@ -207,8 +207,9 @@ class Settings:
                 continue
             setattr(self, name, self._convert(name, data[name]))
 
-        file_version = data.get("settings_version", self.settings_version)
-        if isinstance(file_version, int) and file_version < self.settings_version:
+        target_version = type(self).settings_version
+        file_version = data.get("settings_version", target_version)
+        if isinstance(file_version, int) and file_version < target_version:
             self.migrate(file_version)
 
     def save(self) -> None:

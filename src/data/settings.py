@@ -11,8 +11,9 @@ class Settings:
 
     Sync-Konzept (vorbereitet, in v1 ohne Sync):
         Jede Einstellung ist fest (hardcodiert) als GLOBAL (wird synchronisiert)
-        oder LOKAL (wird nicht synchronisiert) klassifiziert – siehe
-        SYNC_SCOPE. Der Nutzer hat darauf keinen Einfluss.
+        oder LOKAL (wird nicht synchronisiert) klassifiziert: GLOBAL sind
+        genau die Attribute in GLOBAL_KEYS, alle übrigen sind LOKAL.
+        Der Nutzer hat darauf keinen Einfluss.
 
     Textfeld-Validierung:
         Einstellungen ohne festes Auswahlfeld (z. B. csv_delimiter) werden
@@ -60,26 +61,15 @@ class Settings:
 
     # --- Sync-Klassifikation (hardcodiert, keine Nutzereingabe) -----------
 
-    #: Fest definiert, welche Einstellung GLOBAL (sync) bzw. LOKAL (kein
-    #: Sync) ist. Schlüssel = Attributname, Wert = "global" | "local".
-    SYNC_SCOPE: dict = field(
-        default_factory=lambda: {
-            "language": "global",
-            "active_project_id": "local",
-            "default_break_minutes": "global",
-            "csv_delimiter": "local",
-            "csv_decimal_separator": "local",
-            "sync_backend": "local",
-            "sync_config": "local",
-            "last_backup_at": "local",
-            "last_sync_at": "local",
-            "dashboard_layout": "local",
-            "ui_theme": "local",
-            "start_screen": "local",
-            "overtime_warning_threshold": "global",
-            "auto_save_active": "local",
-        },
-        init=False,
+    #: Fest definierte Menge der GLOBALen (zu synchronisierenden)
+    #: Einstellungen. Alle übrigen Attribute sind automatisch LOKAL –
+    #: jedes Attribut muss also nur an einer Stelle gepflegt werden.
+    GLOBAL_KEYS: frozenset = frozenset(
+        {
+            "language",
+            "default_break_minutes",
+            "overtime_warning_threshold",
+        }
     )
 
     def __post_init__(self) -> None:
@@ -146,8 +136,7 @@ class Settings:
         Liefert nur die GLOBALen Einstellungen für einen zukünftigen Sync.
 
         Returns:
-            Wörterbuch mit allen Einstellungen, deren SYNC_SCOPE "global"
-            ist.
+            Wörterbuch mit allen Einstellungen aus GLOBAL_KEYS.
         """
 
     def apply_sync_payload(self, payload: dict) -> None:

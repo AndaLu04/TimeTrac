@@ -1,86 +1,118 @@
-from dataclasses import dataclass, field
+from typing import Annotated
 
 
-@dataclass
+class Sync:
+    """
+    Marker für Einstellungen, die in einem zukünftigen Sync synchronisiert
+    werden (GLOBAL). Attribute ohne diesen Marker sind automatisch LOKAL.
+
+    Die Zuordnung ist damit rein deklarativ am Attribut gepflegt und braucht
+    keine separate Liste. Auslesen zur Laufzeit über
+    `typing.get_type_hints(Settings, include_extras=True)`.
+    """
+
+
+class Validated:
+    """
+    Marker für Einstellungen, die als freies Textfeld in der UI erfassbar
+    sind und deshalb vor dem Speichern validiert werden müssen.
+
+    Attribute mit diesem Marker werden in `Settings.validate()` geprüft;
+    die zugehörige Validierungslogik liegt in `Settings` (siehe
+    validate_*-Methoden).
+    """
+
+
 class Settings:
     """
-    Datenklasse für alle gerätelokalen Einstellungen (ARCHITECTURE.md 3.5).
+    Alle gerätelokalen Einstellungen der Anwendung (ARCHITECTURE.md 3.5).
 
-    Die JSON-Datei dient als persistenter Speicher: Beim Startup werden alle
-    Einstellungen geladen; jede Änderung wird sofort zurückgeschrieben.
+    Konzept:
+        - Die JSON-Datei `file_path` ist der persistente Speicher. Beim
+          Startup werden alle Einstellungen geladen; jede Änderung wird
+          sofort zurückgeschrieben (Auto-Save, siehe `__setattr__`).
+        - Der `Sync`-Marker an der Annotation markiert Einstellungen, die
+          später synchronisiert werden (GLOBAL); alle übrigen sind LOKAL.
+          Die Zuordnung ist hardcodiert, der Nutzer hat keinen Einfluss.
+        - Der `Validated`-Marker kennzeichnet freie Textfelder, die vor
+          dem Speichern über die validate_*-Methoden geprüft werden.
 
-    Sync-Konzept (vorbereitet, in v1 ohne Sync):
-        Jede Einstellung ist fest (hardcodiert) als GLOBAL (wird synchronisiert)
-        oder LOKAL (wird nicht synchronisiert) klassifiziert: GLOBAL sind
-        genau die Attribute in GLOBAL_KEYS, alle übrigen sind LOKAL.
-        Der Nutzer hat darauf keinen Einfluss.
-
-    Textfeld-Validierung:
-        Einstellungen ohne festes Auswahlfeld (z. B. csv_delimiter) werden
-        vor dem Speichern über die zugehörige validate_*-Methode geprüft.
+    Attributes:
+        file_path: Pfad zur JSON-Datei, in der die Einstellungen liegen.
     """
 
-    # --- Persistenz ---------------------------------------------------------
-
-    #: Pfad zur JSON-Datei, in der die Einstellungen gespeichert werden.
     file_path: str
 
     # --- Einstellungen laut ARCHITECTURE.md 3.5 ---------------------------
 
-    #: UI-Sprache (de/en) – GLOBAL.
-    language: str = "de"
-    #: Vorausgewähltes Projekt beim Einstempeln – LOKAL.
+    #: UI-Sprache (de/en).
+    language: Annotated[str, Sync] = "de"
+    #: Vorausgewähltes Projekt beim Einstempeln.
     active_project_id: int | None = None
-    #: Standard-Pausendauer in Minuten – GLOBAL.
-    default_break_minutes: int = 0
-    #: CSV-Trennzeichen, frei eintragbar (Textfeld) – LOKAL.
-    csv_delimiter: str = ","
-    #: Dezimaltrennzeichen im CSV-Export – LOKAL.
-    csv_decimal_separator: str = "."
-    #: Sync-Backend (none/webdav/gdrive/file) – LOKAL.
+    #: Standard-Pausendauer in Minuten.
+    default_break_minutes: Annotated[int, Sync] = 0
+    #: CSV-Trennzeichen, frei eintragbar (Textfeld).
+    csv_delimiter: Annotated[str, Validated] = ","
+    #: Dezimaltrennzeichen im CSV-Export, frei eintragbar (Textfeld).
+    csv_decimal_separator: Annotated[str, Validated] = "."
+    #: Sync-Backend (none/webdav/gdrive/file).
     sync_backend: str = "none"
-    #: Sync-Konfiguration (URL, Zugangsdaten) – LOKAL.
-    sync_config: dict = field(default_factory=dict)
-    #: ISO-Zeitstempel des letzten Backups – LOKAL.
+    #: Sync-Konfiguration (URL, Zugangsdaten).
+    sync_config: dict = None
+    #: ISO-Zeitstempel des letzten Backups.
     last_backup_at: str | None = None
-    #: ISO-Zeitstempel des letzten Syncs – LOKAL.
+    #: ISO-Zeitstempel des letzten Syncs.
     last_sync_at: str | None = None
-    #: Sichtbare Kacheln + Reihenfolge im Dashboard – LOKAL.
-    dashboard_layout: list = field(default_factory=list)
+    #: Sichtbare Kacheln + Reihenfolge im Dashboard.
+    dashboard_layout: list = None
 
     # --- Ergänzende, potenziell benötigte Einstellungen -------------------
 
-    #: Farbschema der Oberfläche (light/dark/system) – LOKAL.
+    #: Farbschema der Oberfläche (light/dark/system).
     ui_theme: str = "light"
-    #: Screen, der beim Start angezeigt wird – LOKAL.
+    #: Screen, der beim Start angezeigt wird.
     start_screen: str = "dashboard"
-    #: Überstundenstand in Stunden, ab dem gewarnt wird – GLOBAL.
-    overtime_warning_threshold: float = 0.0
-    #: Änderungen automatisch in die JSON-Datei schreiben – LOKAL.
+    #: Überstundenstand in Stunden, ab dem gewarnt wird.
+    overtime_warning_threshold: Annotated[float, Sync, Validated] = 0.0
+    #: Änderungen automatisch in die JSON-Datei schreiben.
     auto_save_active: bool = True
 
-    # --- Sync-Klassifikation (hardcodiert, keine Nutzereingabe) -----------
-
-    #: Fest definierte Menge der GLOBALen (zu synchronisierenden)
-    #: Einstellungen. Alle übrigen Attribute sind automatisch LOKAL –
-    #: jedes Attribut muss also nur an einer Stelle gepflegt werden.
-    GLOBAL_KEYS: frozenset = frozenset(
-        {
-            "language",
-            "default_break_minutes",
-            "overtime_warning_threshold",
-        }
-    )
-
-    def __post_init__(self) -> None:
+    def __init__(self, file_path: str) -> None:
         """
-        Lädt nach dem Startup alle Einstellungen aus der JSON-Datei.
+        Initialisiert die Einstellungen und lädt sie beim Startup aus JSON.
+
+        Args:
+            file_path: Pfad zur JSON-Datei. Existiert sie nicht, werden die
+                Default-Werte verwendet und die Datei beim ersten Speichern
+                angelegt.
+        """
+        self.file_path = file_path
+        # Load hier implementieren.
+
+    def __setattr__(self, name: str, value) -> None:
+        """
+        Zentraler Hook für jede Änderung einer Einstellung.
+
+        Prüft Validated-Attribute über die zugehörige validate_*-Methode
+        und schreibt die Änderung bei aktivem Auto-Save in die JSON-Datei.
+
+        Args:
+            name: Name des Attributs.
+            value: Neuer Wert.
+
+        Raises:
+            ValueError: Wenn der Wert eine Validierung nicht besteht.
+        """
+
+    # --- Persistenz --------------------------------------------------------
+
+    def load(self) -> None:
+        """
+        Liest alle Einstellungen aus der JSON-Datei.
 
         Fehlende Schlüssel behalten ihre Default-Werte; eine fehlende oder
         korrupte Datei führt zu den Defaults (kein Absturz beim Startup).
         """
-
-    # --- Persistenz --------------------------------------------------------
 
     def save(self) -> None:
         """
@@ -89,11 +121,10 @@ class Settings:
 
     def _persist_if_auto_save(self) -> None:
         """
-        Schreibt die Einstellungen nach einer Änderung weg, sofern
-        auto_save_active gesetzt ist.
+        Schreibt die Einstellungen weg, sofern auto_save_active gesetzt ist.
         """
 
-    # --- Validierung (Textfelder ohne Auswahlfeld) -------------------------
+    # --- Validierung (freie Textfelder) ------------------------------------
 
     def validate_csv_delimiter(self, value: str) -> bool:
         """
@@ -133,10 +164,11 @@ class Settings:
 
     def get_sync_payload(self) -> dict:
         """
-        Liefert nur die GLOBALen Einstellungen für einen zukünftigen Sync.
+        Liefert nur die GLOBALen (Sync-markierten) Einstellungen.
 
         Returns:
-            Wörterbuch mit allen Einstellungen aus GLOBAL_KEYS.
+            Wörterbuch mit allen Einstellungen, deren Annotation den
+            Sync-Marker trägt.
         """
 
     def apply_sync_payload(self, payload: dict) -> None:

@@ -1,5 +1,10 @@
+import json
+import os
+import tempfile
+import uuid
+from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, get_args, get_origin, get_type_hints
 
 
 class Sync:
@@ -90,6 +95,8 @@ class Settings:
     settings_version: int = 1
     #: App-Version, die die Datei zuletzt geschrieben hat (Fehlersuche,
     #: Erkennung von Downgrades).
+    #: ToDo: Von der Anwendung beim Startup mit der echten Version
+    #: beschreiben lassen (z. B. aus constants.py / Packaging).
     app_version: str = "0.0.0"
     #: UUID des Geräts; dient dem späteren Sync als Konflikt-Kennung
     #: (Last-Writer-Wins pro Einstellung).
@@ -139,8 +146,10 @@ class Settings:
                 Default-Werte verwendet und die Datei beim ersten Speichern
                 angelegt.
         """
-        self.file_path = file_path
-        # Load + Migration hier implementieren.
+        object.__setattr__(self, "_loading", True)
+        object.__setattr__(self, "file_path", file_path)
+        self.load()
+        object.__setattr__(self, "_loading", False)
 
     def __setattr__(self, name: str, value) -> None:
         """
@@ -157,6 +166,22 @@ class Settings:
         Raises:
             ValueError: Wenn der Wert eine Validierung nicht besteht.
         """
+        if name in ("file_path", "_loading"):
+            object.__setattr__(self, name, value)
+            return
+
+        validate = getattr(self, f"validate_{name}", None)
+        if validate is not None and not validate(value):
+            raise ValueError(f"Ungültiger Wert für '{name}': {value!r}")
+
+        object.__setattr__(self, name, value)
+
+        if self._loading:
+            return
+        object.__setattr__(
+            self, "updated_at", datetime.now(timezone.utc).isoformat()
+        )
+        self.save()
 
     # --- Persistenz --------------------------------------------------------
 
@@ -167,11 +192,84 @@ class Settings:
         Fehlende Schlüssel behalten ihre Default-Werte; eine fehlende oder
         korrupte Datei führt zu den Defaults (kein Absturz beim Startup).
         """
+        try:
+            with open(self.file_path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+        except (OSError, json.JSONDecodeError):
+            return  # Keine (lesbare) Datei -> Defaults behalten.
+
+        if not isinstance(data, dict):
+            return  # Korruptes Format -> Defaults behalten.
+
+        hints = get_type_hints(self.__class__, include_extras=True)
+        for name in hints:
+            if name in ("file_path", "_loading") or name not in data:
+                continue
+            setattr(self, name, self._convert(name, data[name]))
+
+        file_version = data.get("settings_version", self.settings_version)
+        if isinstance(file_version, int) and file_version < self.settings_version:
+            self.migrate(file_version)
 
     def save(self) -> None:
         """
         Schreibt alle Einstellungen atomar in die JSON-Datei.
+
+        Atomar heißt: Es wird in eine temporäre Datei im selben Verzeichnis
+        geschrieben und diese dann per os.replace umbenannt – ein Absturz
+        hinterlässt nie eine halb geschriebene Einstellungsdatei.
         """
+        if not self.device_id:
+            object.__setattr__(self, "device_id", str(uuid.uuid4()))
+
+        hints = get_type_hints(self.__class__, include_extras=True)
+        data = {
+            name: getattr(self, name)
+            for name in hints
+            if name not in ("file_path", "_loading")
+        }
+
+        directory = os.path.dirname(self.file_path)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=directory or ".",
+            prefix=".settings_",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_file:
+            json.dump(data, tmp_file, ensure_ascii=False, indent=2)
+            tmp_path = tmp_file.name
+        os.replace(tmp_path, self.file_path)
+
+    def _convert(self, name: str, value):
+        """
+        Wandelt einen geladenen JSON-Wert in den annotierten Typ um.
+
+        StrEnum-Attribute werden aus ihrem String-Wert rekonstruiert; bei
+        ungültigen Werten greift der Klassen-Default (fehlertolerant).
+
+        Args:
+            name: Name des Attributs.
+            value: Rohwert aus der JSON-Datei.
+
+        Returns:
+            Der konvertierte Wert oder der Rohwert, wenn keine
+            Konvertierung nötig/möglich ist (der Aufrufer verwirft
+            ungültige Enum-Werte über den ValueError-Pfad nicht – stattdessen
+            wird der Default beibehalten).
+        """
+        hint = get_type_hints(self.__class__, include_extras=True)[name]
+        origin = get_origin(hint)
+        if origin is Annotated:
+            hint = get_args(hint)[0]
+
+        if isinstance(hint, type) and issubclass(hint, StrEnum):
+            try:
+                return hint(value)
+            except ValueError:
+                return getattr(self.__class__, name)  # Default bei Müll.
+        return value
 
     # --- Migration ----------------------------------------------------------
 
@@ -188,6 +286,13 @@ class Settings:
         Args:
             from_version: Versionsnummer der geladenen Datei.
         """
+        # ToDo: Zukünftige Migrationsschritte hier ergänzen, z. B.:
+        #   if from_version < 2:
+        #       self.csv_delimiter = ";"
+        target_version = type(self).settings_version
+        while from_version < target_version:
+            from_version += 1
+        object.__setattr__(self, "settings_version", from_version)
 
     # --- Validierung (freie Textfelder) ------------------------------------
 
@@ -202,6 +307,12 @@ class Settings:
             True, wenn das Trennzeichen gültig ist (genau ein Zeichen,
             keine Ziffer, kein Anführungszeichen).
         """
+        return (
+            isinstance(value, str)
+            and len(value) == 1
+            and not value.isalnum()
+            and value not in ('"', "'")
+        )
 
     def validate_csv_decimal_separator(self, value: str) -> bool:
         """
@@ -213,6 +324,7 @@ class Settings:
         Returns:
             True, wenn das Zeichen gültig ist (nur "." oder ",").
         """
+        return value in (".", ",")
 
     def validate_overtime_warning_threshold(self, value: float) -> bool:
         """
@@ -224,6 +336,7 @@ class Settings:
         Returns:
             True, wenn der Wert gültig ist (nicht negativ).
         """
+        return isinstance(value, (int, float)) and value >= 0
 
     # --- Sync-Vorbereitung --------------------------------------------------
 
@@ -233,8 +346,14 @@ class Settings:
 
         Returns:
             Wörterbuch mit allen Einstellungen, deren Annotation den
-            Sync-Marker trägt.
+            Sync-Marker trägt. StrEnum-Werte werden als String geliefert.
         """
+        return {
+            name: getattr(self, name).value
+            if isinstance(getattr(self, name), StrEnum)
+            else getattr(self, name)
+            for name in self._names_with_marker(Sync)
+        }
 
     def apply_sync_payload(self, payload: dict) -> None:
         """
@@ -243,3 +362,25 @@ class Settings:
         Args:
             payload: Wörterbuch mit globalen Einstellungen vom Sync-Backend.
         """
+        for name in self._names_with_marker(Sync):
+            if name in payload:
+                setattr(self, name, payload[name])
+
+    def _names_with_marker(self, marker: type) -> list[str]:
+        """
+        Ermittelt alle Attribute, deren Annotation den Marker trägt.
+
+        Args:
+            marker: Marker-Klasse (Sync oder Validated).
+
+        Returns:
+            Sortierte Liste der passenden Attributnamen.
+        """
+        hints = get_type_hints(self.__class__, include_extras=True)
+        names = []
+        for name, hint in hints.items():
+            if name in ("file_path", "_loading"):
+                continue
+            if get_origin(hint) is Annotated and marker in get_args(hint)[1:]:
+                names.append(name)
+        return sorted(names)

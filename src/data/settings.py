@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Annotated, get_args, get_origin, get_type_hints
 
+from constants import VERSION
+
 
 class Sync:
     """
@@ -97,7 +99,7 @@ class Settings:
     #: Erkennung von Downgrades).
     #: ToDo: Von der Anwendung beim Startup mit der echten Version
     #: beschreiben lassen (z. B. aus constants.py / Packaging).
-    app_version: str = "0.0.0"
+    app_version: Annotated[str, Validated] = VERSION
     #: UUID des Geräts; dient dem späteren Sync als Konflikt-Kennung
     #: (Last-Writer-Wins pro Einstellung).
     device_id: str = ""

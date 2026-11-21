@@ -1,6 +1,7 @@
 from enum import Enum, StrEnum
 from pathlib import Path
 
+VERSION = "0.1.0"
 PROJECT_ROOT = Path(__file__).parent.parent
 PROJECT_SRC = PROJECT_ROOT / "src"
 DATABASE = PROJECT_ROOT / "data" / "database.db"
